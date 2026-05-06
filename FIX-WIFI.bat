@@ -1,0 +1,3 @@
+@echo off
+echo Running WiFi fix as Administrator...
+powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -File \"%~dp0fix-wifi-access.ps1\"' -Verb RunAs"
