@@ -729,7 +729,17 @@ function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, o
     zIndex: isDragging ? 50 : undefined,
   }
 
-  // Keep contentEditable in sync with external slide updates
+  // Initialize contentEditable divs with current content when entering edit mode
+  useEffect(() => {
+    if (editing) {
+      if (titleRef.current) titleRef.current.innerText = slide.title
+      if (contentRef.current) contentRef.current.innerText = slide.content
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing])
+
+  // Sync AI updates into contentEditable while editing.
+  // Safe when not editing: refs are null (conditional render detaches them).
   useEffect(() => {
     if (titleRef.current && titleRef.current.innerText !== slide.title) {
       titleRef.current.innerText = slide.title
@@ -793,45 +803,69 @@ function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, o
           {slide.is_question && (
             <p className="text-xs font-semibold mb-2 uppercase tracking-wider select-none" style={{ color: accent }}>💬 Interaction Required</p>
           )}
-          <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
-            <div
-              ref={titleRef}
-              contentEditable={editing}
-              suppressContentEditableWarning
-              onBlur={e => onUpdate('title', e.currentTarget.innerText)}
-              className="font-black leading-tight outline-none"
-              style={{
-                color: '#FFFFFF',
-                fontSize: slide.title.length > 40 ? '1.1rem' : '1.5rem',
-                cursor: editing ? 'text' : 'pointer',
-                borderBottom: editing ? `1px solid ${accent}50` : 'none',
-                paddingBottom: editing ? 2 : 0,
-                minHeight: '1.5em',
-                textShadow: slide.image_url ? '0 2px 8px rgba(0,0,0,0.8)' : 'none',
-              }}
-            />
-            {!editing && !slide.title && (
-              <span style={{ position: 'absolute', top: 0, left: 0, color: '#3A4A6A', fontWeight: 400, fontSize: '1rem', pointerEvents: 'none' }}>Untitled — click to edit</span>
+          <div style={{ marginBottom: '0.75rem' }}>
+            {editing ? (
+              <div
+                ref={titleRef}
+                contentEditable
+                suppressContentEditableWarning
+                onBlur={e => onUpdate('title', e.currentTarget.innerText)}
+                className="font-black leading-tight outline-none"
+                style={{
+                  color: '#FFFFFF',
+                  fontSize: (slide.title || '').length > 40 ? '1.1rem' : '1.5rem',
+                  cursor: 'text',
+                  borderBottom: `1px solid ${accent}50`,
+                  paddingBottom: 2,
+                  minHeight: '1.5em',
+                  textShadow: slide.image_url ? '0 2px 8px rgba(0,0,0,0.8)' : 'none',
+                }}
+              />
+            ) : (
+              <div
+                className="font-black leading-tight"
+                style={{
+                  color: slide.title ? '#FFFFFF' : '#3A4A6A',
+                  fontSize: (slide.title || '').length > 40 ? '1.1rem' : '1.5rem',
+                  fontWeight: slide.title ? undefined : 400,
+                  cursor: 'pointer',
+                  minHeight: '1.5em',
+                  textShadow: slide.image_url ? '0 2px 8px rgba(0,0,0,0.8)' : 'none',
+                }}
+              >
+                {slide.title || 'Untitled — click to edit'}
+              </div>
             )}
           </div>
-          <div style={{ position: 'relative' }}>
-            <div
-              ref={contentRef}
-              contentEditable={editing}
-              suppressContentEditableWarning
-              onBlur={e => onUpdate('content', e.currentTarget.innerText)}
-              className="text-sm leading-relaxed outline-none"
-              style={{
-                color: editing ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.65)',
-                cursor: editing ? 'text' : 'pointer',
-                borderBottom: editing ? `1px solid ${accent}30` : 'none',
-                paddingBottom: editing ? 2 : 0,
-                minHeight: '2em',
-                textShadow: slide.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
-              }}
-            />
-            {!editing && !slide.content && (
-              <span style={{ position: 'absolute', top: 0, left: 0, color: '#3A4A6A', pointerEvents: 'none' }}>No content yet</span>
+          <div>
+            {editing ? (
+              <div
+                ref={contentRef}
+                contentEditable
+                suppressContentEditableWarning
+                onBlur={e => onUpdate('content', e.currentTarget.innerText)}
+                className="text-sm leading-relaxed outline-none"
+                style={{
+                  color: 'rgba(255,255,255,0.85)',
+                  cursor: 'text',
+                  borderBottom: `1px solid ${accent}30`,
+                  paddingBottom: 2,
+                  minHeight: '2em',
+                  textShadow: slide.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
+                }}
+              />
+            ) : (
+              <div
+                className="text-sm leading-relaxed"
+                style={{
+                  color: slide.content ? 'rgba(255,255,255,0.65)' : '#3A4A6A',
+                  cursor: 'pointer',
+                  minHeight: '2em',
+                  textShadow: slide.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
+                }}
+              >
+                {slide.content || 'No content yet'}
+              </div>
             )}
           </div>
         </div>
