@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use, useRef } from 'react'
+import { useState, useEffect, use, useRef, useCallback } from 'react'
 
 interface Step { id: string; title: string; content: string; type: string; is_question: number; image_url: string }
 
@@ -14,14 +14,16 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
   const [currentIndex, setCurrentIndex] = useState(0)
   const [liveMode, setLiveMode] = useState<'slide' | 'question'>('slide')
   const [text, setText] = useState('')
-  const [submitted, setSubmitted] = useState(false)
+  const [submittedResponses, setSubmittedResponses] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [isListening, setIsListening] = useState(false)
+  const [transcribing, setTranscribing] = useState(false)
   const [error, setError] = useState('')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null)
-  const isListeningRef = useRef(false)
-  const accumulatedRef = useRef('')
+  const [waveformBars, setWaveformBars] = useState([0, 0, 0, 0, 0])
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const animFrameRef = useRef<number>(0)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const currentStep = steps[currentIndex]
@@ -43,29 +45,30 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
     })
   }
 
+  // Reset response state when step/mode changes
+  function resetResponseState() {
+    setText('')
+    setSubmittedResponses([])
+    setError('')
+  }
+
   useEffect(() => {
     if (phase !== 'live' && phase !== 'waiting') return
-
     const es = new EventSource(`/api/events/${id}`)
     es.onmessage = (e) => {
       const data = JSON.parse(e.data)
       if (data.type === 'step_changed') {
         setCurrentIndex(data.step)
-        setText('')
-        setSubmitted(false)
         setLiveMode('slide')
         setPhase('live')
-        accumulatedRef.current = ''
+        resetResponseState()
       }
       if (data.type === 'mode_changed') {
         setLiveMode(data.mode)
-        setSubmitted(false)
-        setText('')
-        accumulatedRef.current = ''
+        resetResponseState()
       }
       if (data.type === 'session_ended') setPhase('ended')
     }
-
     const poll = setInterval(async () => {
       try {
         const res = await fetch(`/api/sessions/${id}`)
@@ -79,7 +82,6 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
         }
       } catch { /* ignore */ }
     }, 1000)
-
     return () => { es.close(); clearInterval(poll) }
   }, [id, phase])
 
@@ -90,9 +92,8 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ participant_name: name, participant_role: role, type: 'text', content: text }),
     })
+    setSubmittedResponses(prev => [...prev, text])
     setText('')
-    accumulatedRef.current = ''
-    setSubmitted(true)
     setSubmitting(false)
   }
 
@@ -104,103 +105,97 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ participant_name: name, participant_role: role, type: 'image', content: dataUrl }),
       })
-      setSubmitted(true)
+      setSubmittedResponses(prev => [...prev, '[图片已发送]'])
     }
     reader.readAsDataURL(file)
   }
 
-  function stopVoice() {
-    isListeningRef.current = false
-    setIsListening(false)
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop() } catch { /* ignore */ }
-      recognitionRef.current = null
+  // Real waveform from AudioContext analyser
+  function startWaveform(stream: MediaStream) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 64
+    ctx.createMediaStreamSource(stream).connect(analyser)
+    audioCtxRef.current = ctx
+
+    const data = new Uint8Array(analyser.frequencyBinCount)
+    function tick() {
+      analyser.getByteFrequencyData(data)
+      // Sample 5 frequency bands across the spectrum
+      const bars = [2, 5, 8, 11, 14].map(i => Math.max(8, Math.round((data[i] / 255) * 100)))
+      setWaveformBars(bars)
+      animFrameRef.current = requestAnimationFrame(tick)
     }
+    tick()
   }
 
-  function startVoiceInstance() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any
-    const SR = w.SpeechRecognition || w.webkitSpeechRecognition
-    if (!SR) return
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rec = new SR()
-    rec.lang = 'zh-CN'
-    rec.continuous = false   // false is more reliable on mobile Chrome
-    rec.interimResults = true
-    rec.maxAlternatives = 1
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onresult = (e: any) => {
-      let interimText = ''
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const transcript = e.results[i][0].transcript
-        if (e.results[i].isFinal) {
-          accumulatedRef.current += transcript
-        } else {
-          interimText += transcript
-        }
-      }
-      setText(accumulatedRef.current + interimText)
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onerror = (e: any) => {
-      if (e.error === 'not-allowed') {
-        setError('请在浏览器设置里允许麦克风权限')
-        stopVoice()
-      } else if (e.error === 'audio-capture') {
-        setError('无法访问麦克风，请检查设备')
-        stopVoice()
-      } else if (e.error === 'network') {
-        setError('网络错误，请检查连接后重试')
-        stopVoice()
-      } else if (e.error === 'no-speech') {
-        // no speech detected — onend will restart if still listening
-      } else {
-        setError(`录音错误: ${e.error}`)
-        stopVoice()
-      }
-    }
-
-    rec.onend = () => {
-      recognitionRef.current = null
-      if (isListeningRef.current) {
-        // Still supposed to be listening — create a fresh instance
-        try { startVoiceInstance() } catch { stopVoice() }
-      } else {
-        setIsListening(false)
-      }
-    }
-
-    recognitionRef.current = rec
-    rec.start()
+  function stopWaveform() {
+    cancelAnimationFrame(animFrameRef.current)
+    audioCtxRef.current?.close().catch(() => {})
+    audioCtxRef.current = null
+    setWaveformBars([0, 0, 0, 0, 0])
   }
 
-  function toggleVoice() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any
-    const SR = w.SpeechRecognition || w.webkitSpeechRecognition
-    if (!SR) { setError('语音功能需要 Chrome 浏览器'); return }
-
-    if (isListeningRef.current) {
-      stopVoice()
+  const toggleVoice = useCallback(async () => {
+    if (isListening) {
+      // Stop recording
+      mediaRecorderRef.current?.stop()
       return
     }
 
     setError('')
-    isListeningRef.current = true
-    setIsListening(true)
-    accumulatedRef.current = text  // keep any text already typed
-
     try {
-      startVoiceInstance()
-    } catch {
-      setError('语音启动失败，请重试')
-      stopVoice()
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      startWaveform(stream)
+
+      const chunks: Blob[] = []
+      const mr = new MediaRecorder(stream)
+      mediaRecorderRef.current = mr
+
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data) }
+
+      mr.onstop = async () => {
+        stopWaveform()
+        stream.getTracks().forEach(t => t.stop())
+        setIsListening(false)
+
+        const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' })
+        if (blob.size < 500) return  // too short, skip transcription
+
+        setTranscribing(true)
+        try {
+          const ext = mr.mimeType.includes('mp4') ? 'mp4' : mr.mimeType.includes('ogg') ? 'ogg' : 'webm'
+          const fd = new FormData()
+          fd.append('audio', blob, `recording.${ext}`)
+          const res = await fetch('/api/transcribe', { method: 'POST', body: fd })
+          const data = await res.json()
+          if (data.text?.trim()) {
+            setText(prev => prev ? prev + ' ' + data.text.trim() : data.text.trim())
+          } else {
+            setError('未能识别语音，请重试')
+          }
+        } catch {
+          setError('转录失败，请检查网络后重试')
+        }
+        setTranscribing(false)
+      }
+
+      mr.start()
+      setIsListening(true)
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.name : ''
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setError('请在浏览器设置里允许麦克风权限')
+      } else if (name === 'NotFoundError') {
+        setError('未检测到麦克风设备')
+      } else {
+        setError('无法启动录音，请检查麦克风')
+      }
     }
-  }
+  }, [isListening])
 
   /* ── JOIN ── */
   if (phase === 'join') return (
@@ -213,7 +208,8 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
         <div className="card space-y-4">
           <div>
             <label className="block text-sm font-semibold mb-1" style={{ color: '#C9A84C' }}>Your Name</label>
-            <input className="input-field" placeholder="e.g. Eunice Tan" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleJoin()} />
+            <input className="input-field" placeholder="e.g. Eunice Tan" value={name}
+              onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleJoin()} />
           </div>
           {error && <p className="text-xs text-red-400">{error}</p>}
           <button onClick={handleJoin} className="btn-gold w-full text-center">Enter →</button>
@@ -233,7 +229,8 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
         <p className="text-sm" style={{ color: '#3A4A6A' }}>Waiting for the host to start...</p>
         <div className="flex gap-1 justify-center mt-4">
           {[0, 1, 2].map(i => (
-            <div key={i} className="w-2 h-2 rounded-full" style={{ background: '#C9A84C', animation: `pulse-gold 1.2s ${i * 0.2}s ease-in-out infinite` }} />
+            <div key={i} className="w-2 h-2 rounded-full"
+              style={{ background: '#C9A84C', animation: `pulse-gold 1.2s ${i * 0.2}s ease-in-out infinite` }} />
           ))}
         </div>
       </div>
@@ -255,7 +252,8 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
   return (
     <div className="min-h-screen flex flex-col" style={{ maxHeight: '100dvh' }}>
       {/* Header */}
-      <div className="px-4 py-3 flex items-center justify-between flex-shrink-0" style={{ background: '#111827', borderBottom: '1px solid #2A3A4A' }}>
+      <div className="px-4 py-3 flex items-center justify-between flex-shrink-0"
+        style={{ background: '#111827', borderBottom: '1px solid #2A3A4A' }}>
         <span className="text-xs font-bold tracking-widest uppercase" style={{ color: '#C9A84C' }}>Lapendaz Infinity</span>
         <div className="flex items-center gap-2">
           <span className="live-dot" />
@@ -263,7 +261,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
         </div>
       </div>
 
-      {/* Progress */}
+      {/* Progress bar */}
       <div className="flex gap-0.5 flex-shrink-0">
         {steps.map((_, i) => (
           <div key={i} className="flex-1 h-1"
@@ -274,96 +272,122 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
         {currentStep && (
           <>
-            {/* Slide content */}
-            <div className="fade-in rounded-xl overflow-hidden" style={{ border: '1px solid #2A3A4A', position: 'relative', minHeight: 180,
-              background: currentStep.image_url ? `url(${currentStep.image_url}) center/cover no-repeat` : '#111827' }}>
-              {currentStep.image_url && <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg,rgba(0,0,0,0.7),rgba(0,0,0,0.45))' }} />}
+            {/* Slide card */}
+            <div className="fade-in rounded-xl overflow-hidden" style={{
+              border: '1px solid #2A3A4A', position: 'relative', minHeight: 180,
+              background: currentStep.image_url
+                ? `url(${currentStep.image_url}) center/cover no-repeat`
+                : '#111827',
+            }}>
+              {currentStep.image_url && (
+                <div className="absolute inset-0"
+                  style={{ background: 'linear-gradient(160deg,rgba(0,0,0,0.7),rgba(0,0,0,0.45))' }} />
+              )}
               <div className="relative z-10 p-5">
                 <span className={`tag tag-${currentStep.type} mb-3 inline-block`}>{currentStep.type}</span>
-                <h2 className="text-xl font-bold mb-2" style={{ color: '#FFFFFF', textShadow: currentStep.image_url ? '0 2px 8px rgba(0,0,0,0.9)' : 'none' }}>{currentStep.title}</h2>
-                <p className="text-sm leading-relaxed" style={{ color: currentStep.image_url ? 'rgba(255,255,255,0.88)' : '#B0BDD0', textShadow: currentStep.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none' }}>{currentStep.content}</p>
+                <h2 className="text-xl font-bold mb-2" style={{
+                  color: '#FFFFFF',
+                  textShadow: currentStep.image_url ? '0 2px 8px rgba(0,0,0,0.9)' : 'none',
+                }}>{currentStep.title}</h2>
+                <p className="text-sm leading-relaxed" style={{
+                  color: currentStep.image_url ? 'rgba(255,255,255,0.88)' : '#B0BDD0',
+                  textShadow: currentStep.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
+                }}>{currentStep.content}</p>
               </div>
             </div>
 
-            {/* Question input */}
+            {/* Question input — visible in question mode */}
             {liveMode === 'question' && currentStep.is_question === 1 && (
               <div className="card fade-in space-y-3">
-                <p className="text-sm font-semibold" style={{ color: '#C9A84C' }}>
-                  {submitted ? '✅ Response received' : 'Share your response'}
-                </p>
+                <p className="text-sm font-semibold" style={{ color: '#C9A84C' }}>Share your response</p>
 
-                {submitted ? (
-                  <div>
-                    <p className="text-xs mb-3" style={{ color: '#6B7A99' }}>Your response was sent. You can add more thoughts:</p>
-                    <textarea className="input-field text-sm" rows={3} placeholder="Add another thought..." value={text} onChange={e => setText(e.target.value)} />
-                    <button onClick={submitText} disabled={!text.trim() || submitting} className="btn-gold w-full text-center text-sm mt-2">
-                      Send More
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <textarea
-                      className="input-field text-sm"
-                      rows={4}
-                      placeholder="Type your thoughts here..."
-                      value={text}
-                      onChange={e => {
-                        setText(e.target.value)
-                        accumulatedRef.current = e.target.value
-                      }}
-                    />
-
-                    {/* Waveform animation when listening */}
-                    {isListening && (
-                      <div className="flex items-center gap-1 px-1" style={{ height: 24 }}>
-                        <span className="text-xs" style={{ color: '#E8C97A' }}>录音中</span>
-                        {[0, 1, 2, 3, 4].map(i => (
-                          <div key={i} style={{
-                            width: 3, borderRadius: 2,
-                            background: '#C9A84C',
-                            animation: `voice-bar 0.8s ${i * 0.12}s ease-in-out infinite alternate`,
-                            height: 8,
-                          }} />
-                        ))}
+                {/* Previously submitted answers for this question */}
+                {submittedResponses.length > 0 && (
+                  <div className="space-y-2">
+                    {submittedResponses.map((r, i) => (
+                      <div key={i} className="rounded-lg px-3 py-2 text-sm"
+                        style={{ background: '#0D1829', border: '1px solid #1E3A2A' }}>
+                        <span style={{ color: '#48BB78' }}>✓ </span>
+                        <span style={{ color: '#B0BDD0' }}>{r}</span>
                       </div>
-                    )}
-
-                    {error && <p className="text-xs text-red-400">{error}</p>}
-
-                    <div className="flex gap-2">
-                      {/* Voice button */}
-                      <button onClick={toggleVoice}
-                        className="px-3 py-2 rounded-lg text-sm font-semibold transition-all flex-shrink-0"
-                        style={{
-                          background: isListening ? 'rgba(201,168,76,0.25)' : '#1E2A3A',
-                          color: isListening ? '#E8C97A' : '#6B7A99',
-                          border: `1px solid ${isListening ? '#C9A84C' : '#2A3A4A'}`,
-                          minWidth: 72,
-                        }}>
-                        {isListening ? '⏹ 停止' : '🎙 录音'}
-                      </button>
-
-                      {/* Image upload */}
-                      <button onClick={() => fileRef.current?.click()}
-                        className="px-3 py-2 rounded-lg text-sm transition-all flex-shrink-0"
-                        style={{ background: '#1E2A3A', color: '#6B7A99', border: '1px solid #2A3A4A' }}>
-                        📷
-                      </button>
-                      <input ref={fileRef} type="file" accept="image/*" className="hidden"
-                        onChange={e => e.target.files?.[0] && submitImage(e.target.files[0])} />
-
-                      {/* Submit */}
-                      <button onClick={submitText} disabled={!text.trim() || submitting}
-                        className="btn-gold flex-1 text-center text-sm"
-                        style={{ opacity: !text.trim() ? 0.4 : 1 }}>
-                        {submitting ? '...' : 'Send →'}
-                      </button>
-                    </div>
-                  </>
+                    ))}
+                  </div>
                 )}
+
+                {/* Text input */}
+                <textarea
+                  className="input-field text-sm"
+                  rows={4}
+                  placeholder={submittedResponses.length > 0 ? 'Add more thoughts...' : 'Type your thoughts here...'}
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                />
+
+                {/* Real waveform bars — shown while recording */}
+                {isListening && (
+                  <div className="flex items-end gap-1 px-1" style={{ height: 28 }}>
+                    <span className="text-xs mr-1 self-center" style={{ color: '#E8C97A' }}>录音中</span>
+                    {waveformBars.map((h, i) => (
+                      <div key={i} style={{
+                        width: 4,
+                        height: `${h}%`,
+                        maxHeight: 24,
+                        minHeight: 4,
+                        borderRadius: 2,
+                        background: '#C9A84C',
+                        transition: 'height 0.1s ease',
+                      }} />
+                    ))}
+                  </div>
+                )}
+
+                {/* Transcribing spinner */}
+                {transcribing && (
+                  <p className="text-xs" style={{ color: '#6B7A99' }}>转录中，请稍候...</p>
+                )}
+
+                {/* Error */}
+                {error && <p className="text-xs text-red-400">{error}</p>}
+
+                {/* Action row */}
+                <div className="flex gap-2">
+                  {/* Voice button — always visible */}
+                  <button
+                    onClick={toggleVoice}
+                    disabled={transcribing}
+                    className="px-3 py-2 rounded-lg text-sm font-semibold transition-all flex-shrink-0"
+                    style={{
+                      background: isListening ? 'rgba(201,168,76,0.25)' : '#1E2A3A',
+                      color: isListening ? '#E8C97A' : '#6B7A99',
+                      border: `1px solid ${isListening ? '#C9A84C' : '#2A3A4A'}`,
+                      minWidth: 76,
+                    }}>
+                    {isListening ? '⏹ 停止' : '🎙 录音'}
+                  </button>
+
+                  {/* Image upload */}
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    className="px-3 py-2 rounded-lg text-sm transition-all flex-shrink-0"
+                    style={{ background: '#1E2A3A', color: '#6B7A99', border: '1px solid #2A3A4A' }}>
+                    📷
+                  </button>
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden"
+                    onChange={e => e.target.files?.[0] && submitImage(e.target.files[0])} />
+
+                  {/* Submit */}
+                  <button
+                    onClick={submitText}
+                    disabled={!text.trim() || submitting || transcribing}
+                    className="btn-gold flex-1 text-center text-sm"
+                    style={{ opacity: !text.trim() || submitting || transcribing ? 0.4 : 1 }}>
+                    {submitting ? '...' : 'Send →'}
+                  </button>
+                </div>
               </div>
             )}
 
+            {/* Listening indicator in slide mode */}
             {liveMode === 'slide' && currentStep.is_question === 1 && (
               <div className="text-center py-3">
                 <p className="text-xs" style={{ color: '#3A4A6A' }}>Listening to the host...</p>
@@ -372,14 +396,6 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
           </>
         )}
       </div>
-
-      {/* Waveform keyframes */}
-      <style>{`
-        @keyframes voice-bar {
-          from { height: 4px; }
-          to { height: 20px; }
-        }
-      `}</style>
 
       {/* Footer */}
       <div className="px-4 py-2 flex-shrink-0 text-center" style={{ borderTop: '1px solid #1E2A3A' }}>
