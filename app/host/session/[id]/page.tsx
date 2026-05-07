@@ -34,6 +34,8 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
   const [showTunnelInput, setShowTunnelInput] = useState(false)
   const [summary, setSummary] = useState('')
   const [loadingSummary, setLoadingSummary] = useState(false)
+  const [liveAnalysis, setLiveAnalysis] = useState('')
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [started, setStarted] = useState(false)
 
   const currentStep = session ? steps[session.current_step] : null
@@ -158,6 +160,25 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
     const data = await res.json()
     setSummary(data.summary)
     setLoadingSummary(false)
+  }
+
+  async function analyseResponses() {
+    if (!currentStep || currentResponses.length === 0) return
+    setLoadingAnalysis(true)
+    setLiveAnalysis('')
+    try {
+      const res = await fetch('/api/ai/analyse-responses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: { title: currentStep.title, content: currentStep.content },
+          responses: currentResponses.map(r => ({ participant_name: r.participant_name, content: r.content })),
+        }),
+      })
+      const data = await res.json()
+      setLiveAnalysis(data.analysis || '')
+    } catch { /* ignore */ }
+    setLoadingAnalysis(false)
   }
 
   if (!session) return (
@@ -376,9 +397,31 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
 
           {/* Responses */}
           <div className="flex-1 overflow-y-auto p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#6B7A99' }}>
-              Responses ({currentResponses.length})
-            </p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#6B7A99' }}>
+                Responses ({currentResponses.length})
+              </p>
+              {currentMode === 'question' && currentResponses.length > 0 && (
+                <button
+                  onClick={analyseResponses}
+                  disabled={loadingAnalysis}
+                  className="text-xs px-2.5 py-1 rounded-full font-semibold flex-shrink-0"
+                  style={{ background: 'rgba(201,168,76,0.15)', color: '#C9A84C', border: '1px solid rgba(201,168,76,0.4)' }}
+                >
+                  {loadingAnalysis ? '⏳' : '✨ AI'}
+                </button>
+              )}
+            </div>
+
+            {/* Live AI Analysis result */}
+            {liveAnalysis && (
+              <div className="mb-4 rounded-xl p-3 fade-in" style={{ background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.25)' }}>
+                <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#C9A84C' }}>✨ AI Analysis</p>
+                <p className="text-xs leading-relaxed whitespace-pre-wrap" style={{ color: '#D0D8F0' }}>{liveAnalysis}</p>
+                <button onClick={() => setLiveAnalysis('')} className="text-xs mt-2" style={{ color: '#3A4A6A' }}>dismiss</button>
+              </div>
+            )}
+
             {currentResponses.length === 0
               ? <p className="text-xs" style={{ color: '#3A4A6A' }}>No responses yet.</p>
               : currentResponses.map(r => (
