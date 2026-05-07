@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, use } from 'react'
+import { useRouter } from 'next/navigation'
 import QRCode from 'qrcode'
 import ReactMarkdown from 'react-markdown'
 
@@ -23,7 +24,9 @@ function getSessionSlideAccent(type: string) { return SESSION_SLIDE_ACCENT[type]
 
 export default function HostSession({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const router = useRouter()
   const [session, setSession] = useState<{ title: string; status: string; current_step: number; live_mode: string } | null>(null)
+  const [notFound, setNotFound] = useState(false)
   const [steps, setSteps] = useState<Step[]>([])
   const [responses, setResponses] = useState<Response[]>([])
   const [participants, setParticipants] = useState<Participant[]>([])
@@ -45,6 +48,15 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
 
   const loadSession = useCallback(async () => {
     const res = await fetch(`/api/sessions/${id}`)
+    if (res.status === 404) {
+      // Purge stale session from localStorage so Recent Sessions stays clean
+      try {
+        const saved = JSON.parse(localStorage.getItem('lapendaz_saved_sessions') || '[]')
+        localStorage.setItem('lapendaz_saved_sessions', JSON.stringify(saved.filter((s: { id: string }) => s.id !== id)))
+      } catch { /* ignore */ }
+      setNotFound(true)
+      return
+    }
     const data = await res.json()
     setSession(data.session)
     setSteps(data.steps)
@@ -181,6 +193,17 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
     } catch { /* ignore */ }
     setLoadingAnalysis(false)
   }
+
+  if (notFound) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="card text-center" style={{ maxWidth: 400 }}>
+        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚠️</div>
+        <h2 style={{ color: '#F0F4FF', fontWeight: 700, marginBottom: '0.5rem' }}>Session Not Found</h2>
+        <p style={{ color: '#6B7A99', fontSize: '0.875rem', marginBottom: '1.25rem' }}>This session no longer exists. It may have been removed when the server restarted.</p>
+        <button className="btn-gold w-full" onClick={() => router.push('/host')}>← New Session</button>
+      </div>
+    </div>
+  )
 
   if (!session) return (
     <div className="min-h-screen flex items-center justify-center">
