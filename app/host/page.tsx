@@ -3,10 +3,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
 } from '@dnd-kit/core'
 import {
-  arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable,
+  arrayMove, SortableContext, verticalListSortingStrategy, useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { getSlideTheme } from '@/lib/atmosphere'
@@ -94,7 +94,6 @@ export default function HostPage() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
   const [aiDialog, setAiDialog] = useState<{ field: 'objective' | 'outcome'; step: number; answers: string[] } | null>(null)
@@ -882,7 +881,7 @@ function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, o
             placeholder="Prompt AI to rewrite..."
             value={prompt}
             onChange={e => onPromptChange(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); onRegenerate() } }}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); onRegenerate() } }}
           />
           <button onClick={onRegenerate} disabled={regenerating} className="text-xs px-2.5 py-1 rounded-full"
             style={{ background: accent + '20', color: accent, border: `1px solid ${accent}50` }}>
