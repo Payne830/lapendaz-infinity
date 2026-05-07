@@ -83,6 +83,8 @@ export default function HostPage() {
   const slidesAutoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [slides, setSlides] = useState<Slide[]>([])
+  const slidesRef = useRef<Slide[]>([])
+  const slidePromptsRef = useRef<string[]>([])
   const [generatingSlides, setGeneratingSlides] = useState(false)
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null)
   const [slidePrompts, setSlidePrompts] = useState<string[]>([])
@@ -147,6 +149,10 @@ export default function HostPage() {
       if (sd) setSlidesDraft(JSON.parse(sd))
     } catch { /* ignore */ }
   }, [])
+
+  // Keep refs in sync so async callbacks always read the latest values
+  useEffect(() => { slidesRef.current = slides }, [slides])
+  useEffect(() => { slidePromptsRef.current = slidePrompts }, [slidePrompts])
 
   // Auto-save slides whenever they change (debounced 1.5s)
   useEffect(() => {
@@ -252,19 +258,22 @@ export default function HostPage() {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 30000)
     try {
+      const currentSlides = slidesRef.current
+      const currentPrompts = slidePromptsRef.current
+      if (!currentSlides[index]) throw new Error('Slide not found')
       const res = await fetch('/api/ai/regenerate-slide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ context: ctx, slide: slides[index], prompt: slidePrompts[index] }),
+        body: JSON.stringify({ context: ctx, slide: currentSlides[index], prompt: currentPrompts[index] || '' }),
         signal: controller.signal,
       })
       clearTimeout(timeout)
       const data = await res.json()
       if (!res.ok || !data.slide) throw new Error(data.error || 'Rewrite failed')
-      const updated = [...slides]
-      updated[index] = { ...data.slide, id: slides[index].id }
+      const updated = [...slidesRef.current]
+      updated[index] = { ...data.slide, id: currentSlides[index].id }
       setSlides(updated)
-      const updatedPrompts = [...slidePrompts]
+      const updatedPrompts = [...slidePromptsRef.current]
       updatedPrompts[index] = ''
       setSlidePrompts(updatedPrompts)
     } catch (e) {

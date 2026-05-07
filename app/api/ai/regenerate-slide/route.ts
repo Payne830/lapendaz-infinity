@@ -5,6 +5,7 @@ import { ANTHROPIC_API_KEY } from '@/lib/config'
 export async function POST(req: NextRequest) {
   try {
     const { context, slide, prompt: userPrompt } = await req.json()
+    if (!slide || !context) return NextResponse.json({ error: 'Missing slide or context' }, { status: 400 })
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY })
 
     const prompt = `You are regenerating ONE slide for a session called "${context.title}".
