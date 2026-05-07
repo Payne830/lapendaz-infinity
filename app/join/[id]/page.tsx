@@ -114,15 +114,21 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
     reader.readAsDataURL(file)
   }
 
-  function startVoice(e: React.TouchEvent | React.MouseEvent) {
-    e.preventDefault()
+  function toggleVoice() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any
     const SR = w.webkitSpeechRecognition || w.SpeechRecognition
     if (!SR) { setError('请用 Chrome 浏览器开启语音功能'); return }
-    isPressingRef.current = true
-    setIsListening(true)
 
+    if (isListening) {
+      isPressingRef.current = false
+      recognitionRef.current?.stop()
+      recognitionRef.current = null
+      setIsListening(false)
+      return
+    }
+
+    isPressingRef.current = true
     const rec = new SR()
     rec.lang = 'zh-CN'
     rec.continuous = true
@@ -134,20 +140,27 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
         .map((r: any) => r[0].transcript).join('')
       setText(t)
     }
+    rec.onerror = (e: any) => {
+      if (e.error === 'not-allowed') {
+        setError('请在浏览器设置里允许麦克风权限')
+        setIsListening(false)
+        isPressingRef.current = false
+      }
+    }
     rec.onend = () => {
-      if (isPressingRef.current) { try { rec.start() } catch { /* ignore */ } }
-      else setIsListening(false)
+      if (isPressingRef.current) {
+        try { rec.start() } catch { /* restart failed, stop */ }
+      } else {
+        setIsListening(false)
+      }
     }
     recognitionRef.current = rec
-    try { rec.start() } catch { setIsListening(false) }
-  }
-
-  function stopVoice(e: React.TouchEvent | React.MouseEvent) {
-    e.preventDefault()
-    isPressingRef.current = false
-    recognitionRef.current?.stop()
-    recognitionRef.current = null
-    setIsListening(false)
+    try {
+      rec.start()
+      setIsListening(true)
+    } catch {
+      setError('语音启动失败，请重试')
+    }
   }
 
   /* ── JOIN ── */
@@ -259,18 +272,15 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
                     />
 
                     <div className="flex gap-2">
-                      {/* Voice — hold to speak */}
-                      <button
-                        onTouchStart={startVoice} onTouchEnd={stopVoice}
-                        onMouseDown={startVoice} onMouseUp={stopVoice} onMouseLeave={stopVoice}
-                        className="px-3 py-2 rounded-lg text-sm font-semibold transition-all flex-shrink-0 select-none"
+                      {/* Voice — tap to start/stop */}
+                      <button onClick={toggleVoice}
+                        className="px-3 py-2 rounded-lg text-sm font-semibold transition-all flex-shrink-0"
                         style={{
                           background: isListening ? 'rgba(201,168,76,0.25)' : '#1E2A3A',
                           color: isListening ? '#E8C97A' : '#6B7A99',
                           border: `1px solid ${isListening ? '#C9A84C' : '#2A3A4A'}`,
-                          userSelect: 'none',
                         }}>
-                        {isListening ? '🎙 ···' : '🎙'}
+                        {isListening ? '🔴 停止' : '🎙 录音'}
                       </button>
 
                       {/* Image upload */}
