@@ -248,20 +248,33 @@ export default function HostPage() {
 
   async function regenerateSlide(index: number) {
     setRegeneratingIndex(index)
+    setError('')
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30000)
     try {
       const res = await fetch('/api/ai/regenerate-slide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ context: ctx, slide: slides[index], prompt: slidePrompts[index] }),
+        signal: controller.signal,
       })
+      clearTimeout(timeout)
       const data = await res.json()
+      if (!res.ok || !data.slide) throw new Error(data.error || 'Rewrite failed')
       const updated = [...slides]
       updated[index] = { ...data.slide, id: slides[index].id }
       setSlides(updated)
       const updatedPrompts = [...slidePrompts]
       updatedPrompts[index] = ''
       setSlidePrompts(updatedPrompts)
-    } catch { /* ignore */ }
+    } catch (e) {
+      clearTimeout(timeout)
+      if (e instanceof Error && e.name === 'AbortError') {
+        setError('Rewrite timed out — please try again.')
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to rewrite slide')
+      }
+    }
     setRegeneratingIndex(null)
   }
 
@@ -665,6 +678,13 @@ export default function HostPage() {
               <button onClick={() => addSlide()} className="btn-ghost w-full text-sm text-center py-4" style={{ borderStyle: 'dashed' }}>
                 + Add Slide
               </button>
+
+              {error && (
+                <p className="text-sm text-red-400 bg-red-400/10 rounded-lg px-4 py-2 flex items-center justify-between">
+                  {error}
+                  <button onClick={() => setError('')} className="ml-3 text-red-400 opacity-60 hover:opacity-100">✕</button>
+                </p>
+              )}
             </div>
           )}
 
@@ -853,7 +873,7 @@ function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, o
             placeholder="Prompt AI to rewrite..."
             value={prompt}
             onChange={e => onPromptChange(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && onRegenerate()}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); onRegenerate() } }}
           />
           <button onClick={onRegenerate} disabled={regenerating} className="text-xs px-2.5 py-1 rounded-full"
             style={{ background: accent + '20', color: accent, border: `1px solid ${accent}50` }}>
