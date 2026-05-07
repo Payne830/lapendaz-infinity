@@ -97,7 +97,6 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
   }
 
   useEffect(() => {
-    if (!started) return
     const es = new EventSource(`/api/events/${id}`)
     es.onmessage = (e) => {
       const data = JSON.parse(e.data)
@@ -108,7 +107,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
       if (data.type === 'participant_joined') setParticipants(prev => prev.some(p => p.name === data.name) ? prev : [...prev, { id: data.name, name: data.name, role: data.role }])
     }
     return () => es.close()
-  }, [id, started])
+  }, [id])
 
   async function startSession() {
     await fetch(`/api/sessions/${id}/advance`, {

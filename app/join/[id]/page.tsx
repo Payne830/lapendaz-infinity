@@ -14,7 +14,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
   const { id } = use(params)
   const [phase, setPhase] = useState<'join' | 'waiting' | 'live' | 'ended'>('join')
   const [name, setName] = useState('')
-  const [role, setRole] = useState(ROLES[0])
+  const role = 'Officer'
   const [sessionTitle, setSessionTitle] = useState('')
   const [steps, setSteps] = useState<Step[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -117,14 +117,43 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any
     const SR = w.webkitSpeechRecognition || w.SpeechRecognition
-    if (!SR) { setError('Voice not supported. Please use Chrome.'); return }
-    if (isListening) { recognitionRef.current?.stop(); setIsListening(false); return }
-    const rec = new SR()
-    rec.lang = 'zh-CN'; rec.continuous = true; rec.interimResults = true
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onresult = (e: any) => setText(Array.from(e.results as unknown[]).map((r: any) => r[0].transcript).join(''))
-    rec.onend = () => setIsListening(false)
-    recognitionRef.current = rec; rec.start(); setIsListening(true)
+    if (!SR) { setError('请用 Chrome 浏览器开启语音功能'); return }
+
+    if (isListening) {
+      recognitionRef.current?.stop()
+      recognitionRef.current = null
+      setIsListening(false)
+      return
+    }
+
+    function startRec() {
+      const rec = new SR()
+      rec.lang = 'zh-CN'       // handles Chinese + English mixed naturally
+      rec.continuous = true
+      rec.interimResults = true
+      rec.maxAlternatives = 1
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rec.onresult = (e: any) => {
+        const transcript = Array.from(e.results as unknown[])
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .map((r: any) => r[0].transcript)
+          .join('')
+        setText(transcript)
+      }
+      rec.onerror = () => {
+        // auto-restart on transient errors (network, no-speech)
+        if (recognitionRef.current) { setTimeout(startRec, 300) }
+      }
+      rec.onend = () => {
+        // auto-restart to keep listening until user taps Stop
+        if (recognitionRef.current) { setTimeout(startRec, 300) }
+      }
+      recognitionRef.current = rec
+      rec.start()
+    }
+
+    setIsListening(true)
+    startRec()
   }
 
   /* ── JOIN ── */
@@ -139,12 +168,6 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
           <div>
             <label className="block text-sm font-semibold mb-1" style={{ color: '#C9A84C' }}>Your Name</label>
             <input className="input-field" placeholder="e.g. Eunice Tan" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleJoin()} />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold mb-1" style={{ color: '#C9A84C' }}>Your Role</label>
-            <select className="input-field" value={role} onChange={e => setRole(e.target.value)}>
-              {ROLES.map(r => <option key={r}>{r}</option>)}
-            </select>
           </div>
           {error && <p className="text-xs text-red-400">{error}</p>}
           <button onClick={handleJoin} className="btn-gold w-full text-center">Enter →</button>
