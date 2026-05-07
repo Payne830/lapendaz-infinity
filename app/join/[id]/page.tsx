@@ -190,6 +190,10 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
           const ext = usedMime.includes('mp4') ? 'mp4' : usedMime.includes('ogg') ? 'ogg' : 'webm'
           const fd = new FormData()
           fd.append('audio', blob, `recording.${ext}`)
+          // Pass current question as context so Whisper + Claude can improve accuracy
+          if (currentStep) {
+            fd.append('hint', `${currentStep.title}: ${currentStep.content}`.slice(0, 300))
+          }
           const res = await fetch('/api/transcribe', { method: 'POST', body: fd })
           const data = await res.json()
           if (data.text?.trim()) {
