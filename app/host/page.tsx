@@ -795,7 +795,7 @@ function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, o
         </span>
 
         <button onClick={e => { e.stopPropagation(); onRemove() }}
-          className="absolute top-4 right-4 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
+          className="absolute top-4 right-4 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-30"
           style={{ color: 'rgba(255,255,255,0.5)' }}>✕</button>
 
         {/* WYSIWYG content area — click to edit inline */}
