@@ -3,6 +3,7 @@
 import { useState, useEffect, use, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { getSlideTheme } from '@/lib/atmosphere'
 
 interface Step { id: string; title: string; content: string; type: string; is_question: number; image_url: string }
 
@@ -13,6 +14,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
   const role = 'Officer'
   const [sessionTitle, setSessionTitle] = useState('')
   const [sessionSummary, setSessionSummary] = useState('')
+  const [atmosphere, setAtmosphere] = useState('Inspirational')
   const [steps, setSteps] = useState<Step[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [liveMode, setLiveMode] = useState<'slide' | 'question'>('slide')
@@ -66,17 +68,30 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
 
   const currentStep = steps[currentIndex]
 
-  async function handleJoin() {
-    if (!name.trim()) { setError('Please enter your name'); return }
+  // Auto-rejoin if name was saved in localStorage (handles page refresh)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`lapendaz_join_${id}`)
+      if (saved) { setName(saved); handleJoin(saved) }
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function handleJoin(joinName?: string) {
+    const n = (joinName ?? name).trim()
+    if (!n) { setError('Please enter your name'); return }
     const res = await fetch(`/api/sessions/${id}`)
     if (!res.ok) { setError('Session not found'); return }
     const data = await res.json()
+    try { setAtmosphere(JSON.parse(data.session.context || '{}').atmosphere || 'Inspirational') } catch { /* use default */ }
     if (data.session.status === 'ended') {
       setSessionTitle(data.session.title)
       setSessionSummary(data.session.summary || '')
       setPhase('ended')
       return
     }
+    try { localStorage.setItem(`lapendaz_join_${id}`, n) } catch { /* ignore */ }
+    setName(n)
     setSessionTitle(data.session.title)
     setSteps(data.steps)
     setCurrentIndex(data.session.current_step)
@@ -84,7 +99,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
     setPhase(data.session.status === 'live' ? 'live' : 'waiting')
     await fetch(`/api/sessions/${id}/join`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ participant_name: name, participant_role: role }),
+      body: JSON.stringify({ participant_name: n, participant_role: role }),
     })
   }
 
@@ -283,7 +298,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
               onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleJoin()} />
           </div>
           {error && <p className="text-xs text-red-400">{error}</p>}
-          <button onClick={handleJoin} className="btn-gold w-full text-center">Enter →</button>
+          <button onClick={() => handleJoin()} className="btn-gold w-full text-center">Enter →</button>
         </div>
       </div>
     </div>
@@ -367,17 +382,19 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
         {currentStep && (
           <>
             {/* Slide card */}
+            {(() => {
+              const { bg, accent } = getSlideTheme(atmosphere, currentStep.type)
+              return (
             <div className="fade-in rounded-xl overflow-hidden" style={{
-              border: '1px solid #2A3A4A', position: 'relative', minHeight: 260,
-              background: currentStep.image_url
-                ? `url(${currentStep.image_url}) center/cover no-repeat`
-                : '#111827',
+              border: `1px solid ${accent}30`, position: 'relative', minHeight: 260,
+              background: currentStep.image_url ? `url(${currentStep.image_url}) center/cover no-repeat` : bg,
             }}>
+              <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: accent }} />
               {currentStep.image_url && (
                 <div className="absolute inset-0"
                   style={{ background: 'linear-gradient(160deg,rgba(0,0,0,0.7),rgba(0,0,0,0.45))' }} />
               )}
-              <div className="relative z-10 p-5">
+              <div className="relative z-10 p-5 pl-6">
                 <span className={`tag tag-${currentStep.type} mb-3 inline-block`}>{currentStep.type}</span>
                 <h2 className="text-xl font-bold mb-2" style={{
                   color: '#FFFFFF',
@@ -389,6 +406,8 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
                 }}>{currentStep.content}</p>
               </div>
             </div>
+              )
+            })()}
 
             {/* Question input — visible in question mode */}
             {liveMode === 'question' && currentStep.is_question === 1 && (

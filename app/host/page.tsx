@@ -9,8 +9,9 @@ import {
   arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { getSlideTheme } from '@/lib/atmosphere'
 
-type WizardStep = 1 | 2 | 3
+type WizardStep = 1 | 2
 
 interface Context {
   title: string
@@ -45,7 +46,7 @@ const ATTRIBUTION_OPTIONS = [
   { value: 'role', label: 'Role Only', desc: 'e.g. "CEO"' },
   { value: 'anonymous', label: 'Anonymous', desc: 'No attribution' },
 ]
-const STEP_LABELS = ['Context', 'Build Slides', 'Ready to Launch']
+const STEP_LABELS = ['Context', 'Build Slides']
 const DRAFT_KEY = 'lapendaz_draft_ctx'
 const SESSIONS_KEY = 'lapendaz_saved_sessions'
 
@@ -67,9 +68,6 @@ export default function HostPage() {
   const [slidePrompts, setSlidePrompts] = useState<string[]>([])
 
   const [launching, setLaunching] = useState(false)
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const [launchQr, setLaunchQr] = useState('')
-  const [launchJoinUrl, setLaunchJoinUrl] = useState('')
   const [error, setError] = useState('')
 
   const sensors = useSensors(
@@ -229,7 +227,7 @@ export default function HostPage() {
     setSlidePrompts(arrayMove(slidePrompts, oldIndex, newIndex))
   }
 
-  async function goToStep3() {
+  async function createAndLaunch() {
     setLaunching(true)
     setError('')
     try {
@@ -247,32 +245,17 @@ export default function HostPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
 
-      // Save to recent sessions
       try {
         const existing: SavedSession[] = JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]')
         const updated = [{ id: data.id, title: ctx.title, savedAt: Date.now() }, ...existing].slice(0, 10)
         localStorage.setItem(SESSIONS_KEY, JSON.stringify(updated))
       } catch { /* ignore */ }
 
-      // Generate QR for waiting room
-      const base = localStorage.getItem('lapendaz_tunnel_base') || window.location.origin
-      const joinUrl = `${base}/join/${data.id}`
-      setLaunchJoinUrl(joinUrl)
-      setSessionId(data.id)
-
-      const QRCode = (await import('qrcode')).default
-      const qr = await QRCode.toDataURL(joinUrl, { width: 260, margin: 2, color: { dark: '#C9A84C', light: '#111827' } })
-      setLaunchQr(qr)
-
-      setStep(3)
+      router.push(`/host/session/${data.id}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create session')
+      setLaunching(false)
     }
-    setLaunching(false)
-  }
-
-  function launch() {
-    if (sessionId) router.push(`/host/session/${sessionId}`)
   }
 
   function deleteSession(id: string) {
@@ -311,7 +294,7 @@ export default function HostPage() {
                       {label}
                     </span>
                   </div>
-                  {i < 2 && <div className="w-8 h-px mx-2 flex-shrink-0" style={{ background: isDone ? '#48BB78' : '#2A3A4A' }} />}
+                  {i < 1 && <div className="w-8 h-px mx-2 flex-shrink-0" style={{ background: isDone ? '#48BB78' : '#2A3A4A' }} />}
                 </div>
               )
             })}
@@ -538,8 +521,8 @@ export default function HostPage() {
                   <h2 className="text-2xl font-black" style={{ color: '#F0F4FF' }}>Build Slides</h2>
                   <p className="text-sm mt-1" style={{ color: '#6B7A99' }}>AI generated {slides.length} slides. Click any slide to edit.</p>
                 </div>
-                <button onClick={goToStep3} disabled={launching} className="btn-gold px-6 text-sm">
-                  {launching ? <span className="flex items-center gap-2"><Spinner /> Creating session...</span> : 'Next: Launch →'}
+                <button onClick={createAndLaunch} disabled={launching} className="btn-gold px-6 text-sm">
+                  {launching ? <span className="flex items-center gap-2"><Spinner /> Creating session...</span> : '🚀 Launch Session →'}
                 </button>
               </div>
 
@@ -579,118 +562,10 @@ export default function HostPage() {
             </div>
           )}
 
-          {/* ── STEP 3: QR WAITING ROOM ── */}
-          {step === 3 && sessionId && (
-            <div className="fade-in space-y-6 max-w-xl mx-auto">
-              <div>
-                <h2 className="text-2xl font-black" style={{ color: '#F0F4FF' }}>Ready to Launch</h2>
-                <p className="text-sm mt-1" style={{ color: '#6B7A99' }}>
-                  Session created · {slides.length} slides · Share the QR code and start when ready
-                </p>
-              </div>
-
-              {/* QR Card */}
-              <div className="card flex flex-col items-center gap-5 py-8" style={{ borderColor: '#C9A84C40' }}>
-                {launchQr && (
-                  <img src={launchQr} alt="Join QR" className="rounded-2xl" style={{ width: 220 }} />
-                )}
-                <div className="text-center">
-                  <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: '#C9A84C' }}>Join URL</p>
-                  <p className="text-xs break-all" style={{ color: '#6B7A99' }}>{launchJoinUrl}</p>
-                </div>
-              </div>
-
-              {/* Slide summary */}
-              <div className="card-dark space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#6B7A99' }}>
-                  Session Flow ({slides.length} steps)
-                </p>
-                {slides.map((s, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <span className="text-xs w-5 text-center flex-shrink-0" style={{ color: '#3A4A6A' }}>{i + 1}</span>
-                    <span className={`tag tag-${s.type} flex-shrink-0`}>{s.type}</span>
-                    <span className="text-sm truncate" style={{ color: '#B0BDD0' }}>{s.title}</span>
-                    {s.is_question && <span className="text-xs flex-shrink-0" style={{ color: '#9AE6B4' }}>💬</span>}
-                  </div>
-                ))}
-              </div>
-
-              {error && <p className="text-sm text-red-400 bg-red-400/10 rounded-lg px-4 py-2">{error}</p>}
-
-              <button
-                onClick={launch}
-                className="btn-gold w-full text-center text-base"
-                style={{ background: 'linear-gradient(135deg,#48BB78,#68D391)', color: '#0A0E1A' }}
-              >
-                🚀 Start Session
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </div>
   )
-}
-
-type SlideType = 'intro' | 'slide' | 'question' | 'reflection' | 'closing'
-
-const ATMOSPHERE_PALETTES: Record<string, { accent: string; bgs: Record<SlideType, string> }> = {
-  'Professional': {
-    accent: '#90CDF4',
-    bgs: {
-      intro:      'linear-gradient(135deg, #0D1B2A 0%, #1E3A5F 100%)',
-      slide:      'linear-gradient(135deg, #0A1525 0%, #112035 100%)',
-      question:   'linear-gradient(135deg, #091A2A 0%, #0E2535 100%)',
-      reflection: 'linear-gradient(135deg, #0D1525 0%, #152535 100%)',
-      closing:    'linear-gradient(135deg, #0D1B2A 0%, #1A3050 100%)',
-    },
-  },
-  'Casual & Warm': {
-    accent: '#F6AD55',
-    bgs: {
-      intro:      'linear-gradient(135deg, #2D1505 0%, #4A2510 100%)',
-      slide:      'linear-gradient(135deg, #1A0E05 0%, #2D1A0A 100%)',
-      question:   'linear-gradient(135deg, #1A1205 0%, #2D200A 100%)',
-      reflection: 'linear-gradient(135deg, #200A05 0%, #351510 100%)',
-      closing:    'linear-gradient(135deg, #2D1505 0%, #4A2510 100%)',
-    },
-  },
-  'Energetic': {
-    accent: '#F687B3',
-    bgs: {
-      intro:      'linear-gradient(135deg, #1A0530 0%, #2D0A4A 100%)',
-      slide:      'linear-gradient(135deg, #0D0520 0%, #1A0A35 100%)',
-      question:   'linear-gradient(135deg, #050D30 0%, #0A1A4A 100%)',
-      reflection: 'linear-gradient(135deg, #200535 0%, #350A4A 100%)',
-      closing:    'linear-gradient(135deg, #1A0530 0%, #2D0A4A 100%)',
-    },
-  },
-  'Inspirational': {
-    accent: '#E8C97A',
-    bgs: {
-      intro:      'linear-gradient(135deg, #1A1200 0%, #2A1E00 100%)',
-      slide:      'linear-gradient(135deg, #0A0E1A 0%, #111827 100%)',
-      question:   'linear-gradient(135deg, #0D1A0D 0%, #1A2A1A 100%)',
-      reflection: 'linear-gradient(135deg, #130D1A 0%, #1E1228 100%)',
-      closing:    'linear-gradient(135deg, #1A0D0D 0%, #2A1212 100%)',
-    },
-  },
-  'Structured & Formal': {
-    accent: '#A0AEC0',
-    bgs: {
-      intro:      'linear-gradient(135deg, #0A0F14 0%, #1A2535 100%)',
-      slide:      'linear-gradient(135deg, #080C10 0%, #12202E 100%)',
-      question:   'linear-gradient(135deg, #080E0A 0%, #101A12 100%)',
-      reflection: 'linear-gradient(135deg, #0A0810 0%, #14101E 100%)',
-      closing:    'linear-gradient(135deg, #0A0F14 0%, #1A2535 100%)',
-    },
-  },
-}
-
-function getSlideTheme(atmosphere: string, type: string): { accent: string; bg: string } {
-  const palette = ATMOSPHERE_PALETTES[atmosphere] ?? ATMOSPHERE_PALETTES['Inspirational']
-  const bg = palette.bgs[type as SlideType] ?? palette.bgs.slide
-  return { accent: palette.accent, bg }
 }
 
 interface SlideCardProps {

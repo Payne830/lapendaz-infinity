@@ -5,28 +5,16 @@ import { useRouter } from 'next/navigation'
 import QRCode from 'qrcode'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { getSlideTheme } from '@/lib/atmosphere'
 
 interface Step { id: string; step_order: number; type: string; title: string; content: string; is_question: number; image_url: string }
 interface Response { id: string; participant_name: string; participant_role: string; content: string; type: string; step_id: string }
 interface Participant { id: string; name: string; role: string }
 
-const SESSION_SLIDE_BG: Record<string, string> = {
-  intro:      'linear-gradient(135deg, #1A1200 0%, #2A1E00 100%)',
-  slide:      'linear-gradient(135deg, #0A0E1A 0%, #111827 100%)',
-  question:   'linear-gradient(135deg, #0D1A0D 0%, #1A2A1A 100%)',
-  reflection: 'linear-gradient(135deg, #130D1A 0%, #1E1228 100%)',
-  closing:    'linear-gradient(135deg, #1A0D0D 0%, #2A1212 100%)',
-}
-const SESSION_SLIDE_ACCENT: Record<string, string> = {
-  intro: '#E8C97A', slide: '#90CDF4', question: '#9AE6B4', reflection: '#D6BCFA', closing: '#FBD38D',
-}
-function getSessionSlideBg(type: string) { return SESSION_SLIDE_BG[type] ?? SESSION_SLIDE_BG.slide }
-function getSessionSlideAccent(type: string) { return SESSION_SLIDE_ACCENT[type] ?? '#C9A84C' }
-
 export default function HostSession({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const [session, setSession] = useState<{ title: string; status: string; current_step: number; live_mode: string } | null>(null)
+  const [session, setSession] = useState<{ title: string; status: string; current_step: number; live_mode: string; context?: string } | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [steps, setSteps] = useState<Step[]>([])
   const [responses, setResponses] = useState<Response[]>([])
@@ -47,6 +35,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
   const currentStep = session ? steps[session.current_step] : null
   const currentMode = session?.live_mode ?? 'slide'
   const currentResponses = currentStep ? responses.filter(r => r.step_id === currentStep.id) : []
+  const atmosphere = (() => { try { return JSON.parse(session?.context || '{}').atmosphere || 'Inspirational' } catch { return 'Inspirational' } })()
 
   const loadSession = useCallback(async () => {
     const res = await fetch(`/api/sessions/${id}`)
@@ -374,12 +363,16 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
                 </div>
 
                 {/* Current slide */}
+                {(() => {
+                  const { bg, accent } = getSlideTheme(atmosphere, currentStep.type)
+                  return (
                 <div className="rounded-2xl overflow-hidden flex-1 min-h-0" style={{
                   border: '1px solid #2A3A4A',
                   position: 'relative',
-                  background: getSessionSlideBg(currentStep.type),
+                  background: currentStep.image_url ? `url(${currentStep.image_url}) center/cover no-repeat` : bg,
                 }}>
-                  <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: getSessionSlideAccent(currentStep.type) }} />
+                  {currentStep.image_url && <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg,rgba(0,0,0,0.65),rgba(0,0,0,0.4))' }} />}
+                  <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: accent }} />
                   <div className="relative z-10 p-10 h-full flex flex-col justify-center">
                     <div className="flex items-center gap-2 mb-4">
                       <span className={`tag tag-${currentStep.type}`}>{currentStep.type}</span>
@@ -395,6 +388,8 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
                     </p>
                   </div>
                 </div>
+                  )
+                })()}
 
                 {/* Mode toggle */}
                 {currentStep.is_question === 1 && (
