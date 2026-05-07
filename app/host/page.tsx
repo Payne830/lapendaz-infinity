@@ -344,8 +344,7 @@ export default function HostPage() {
         const existing: SavedSession[] = JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]')
         const updated = [{ id: data.id, title: ctx.title, savedAt: Date.now() }, ...existing].slice(0, 10)
         localStorage.setItem(SESSIONS_KEY, JSON.stringify(updated))
-        localStorage.removeItem(DRAFT_SLIDES_KEY)
-        setSlidesDraft(null)
+        // Keep draft slides so they survive a server restart
       } catch { /* ignore */ }
 
       router.push(`/host/session/${data.id}`)
