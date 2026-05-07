@@ -346,7 +346,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
                 {/* Real waveform bars — shown while recording */}
                 {isListening && (
                   <div className="flex items-end gap-1 px-1" style={{ height: 28 }}>
-                    <span className="text-xs mr-1 self-center" style={{ color: '#E8C97A' }}>录音中</span>
+                    <span className="text-xs mr-1 self-center" style={{ color: '#E8C97A' }}>Recording</span>
                     {waveformBars.map((h, i) => (
                       <div key={i} style={{
                         width: 4,
@@ -363,7 +363,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
 
                 {/* Transcribing spinner */}
                 {transcribing && (
-                  <p className="text-xs" style={{ color: '#6B7A99' }}>转录中，请稍候...</p>
+                  <p className="text-xs" style={{ color: '#6B7A99' }}>Transcribing...</p>
                 )}
 
                 {/* Error */}
@@ -382,7 +382,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
                       border: `1px solid ${isListening ? '#C9A84C' : '#2A3A4A'}`,
                       minWidth: 76,
                     }}>
-                    {isListening ? '⏹ 停止' : '🎙 录音'}
+                    {isListening ? '⏹ Stop' : '🎙 Record'}
                   </button>
 
                   {/* Image upload */}
