@@ -862,6 +862,7 @@ function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, o
                   cursor: 'pointer',
                   minHeight: '2em',
                   textShadow: slide.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
+                  whiteSpace: 'pre-wrap',
                 }}
               >
                 {slide.content || 'No content yet'}
