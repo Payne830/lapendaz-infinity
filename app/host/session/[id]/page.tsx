@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, use } from 'react'
 import { useRouter } from 'next/navigation'
 import QRCode from 'qrcode'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface Step { id: string; step_order: number; type: string; title: string; content: string; is_question: number; image_url: string }
 interface Response { id: string; participant_name: string; participant_role: string; content: string; type: string; step_id: string }
@@ -313,7 +314,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
                 {summary ? (
                   <>
                     <div className="rounded-xl p-4 overflow-y-auto report-body" style={{ background: '#0A0E1A', maxHeight: 440 }}>
-                      <ReactMarkdown>{summary}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary}</ReactMarkdown>
                     </div>
                     <button
                       onClick={() => {

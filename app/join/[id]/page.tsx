@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface Step { id: string; title: string; content: string; type: string; is_question: number; image_url: string }
 
@@ -289,7 +290,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
             </p>
             <div className="rounded-xl p-4 report-body overflow-y-auto"
               style={{ background: '#111827', border: '1px solid #2A3A4A', maxHeight: '60vh' }}>
-              <ReactMarkdown>{sessionSummary}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{sessionSummary}</ReactMarkdown>
             </div>
             <button
               onClick={() => {
