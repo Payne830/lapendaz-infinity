@@ -29,7 +29,7 @@ interface SavedSession {
 }
 
 const ATMOSPHERE_OPTIONS = ['Professional', 'Casual & Warm', 'Energetic', 'Inspirational', 'Structured & Formal']
-const STEP_LABELS = ['Context', 'Build Slides', 'Interaction']
+const STEP_LABELS = ['Context', 'Build Slides', 'Ready to Launch']
 const DRAFT_KEY = 'lapendaz_draft_ctx'
 const SESSIONS_KEY = 'lapendaz_saved_sessions'
 
@@ -49,10 +49,10 @@ export default function HostPage() {
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null)
   const [slidePrompts, setSlidePrompts] = useState<string[]>([])
 
-  const [questions, setQuestions] = useState<Slide[]>([])
-  const [generatingQuestions, setGeneratingQuestions] = useState(false)
-
   const [launching, setLaunching] = useState(false)
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [launchQr, setLaunchQr] = useState('')
+  const [launchJoinUrl, setLaunchJoinUrl] = useState('')
   const [error, setError] = useState('')
 
   // Load draft and saved sessions on mount
@@ -146,39 +146,9 @@ export default function HostPage() {
   }
 
   async function goToStep3() {
-    setGeneratingQuestions(true)
-    try {
-      const res = await fetch('/api/ai/generate-questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ context: ctx, slides }),
-      })
-      const data = await res.json()
-      setQuestions(data.questions)
-    } catch { setQuestions([]) }
-    setGeneratingQuestions(false)
-    setStep(3)
-  }
-
-  function updateQuestion(index: number, field: keyof Slide, value: string | boolean) {
-    const updated = [...questions]
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(updated[index] as any)[field] = value
-    setQuestions(updated)
-  }
-
-  function addQuestion() {
-    setQuestions([...questions, { type: 'question', title: 'New Question', content: '', is_question: true }])
-  }
-
-  async function launch() {
     setLaunching(true)
     setError('')
     try {
-      const allSteps = [
-        ...slides,
-        ...questions.map(q => ({ ...q, is_question: true, type: 'question' as const }))
-      ]
       const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -187,7 +157,7 @@ export default function HostPage() {
           goal: ctx.objective,
           context: ctx,
           participant_count: 7,
-          steps: allSteps,
+          steps: slides,
         }),
       })
       const data = await res.json()
@@ -200,11 +170,25 @@ export default function HostPage() {
         localStorage.setItem(SESSIONS_KEY, JSON.stringify(updated))
       } catch { /* ignore */ }
 
-      router.push(`/host/session/${data.id}`)
+      // Generate QR for waiting room
+      const base = localStorage.getItem('lapendaz_tunnel_base') || window.location.origin
+      const joinUrl = `${base}/join/${data.id}`
+      setLaunchJoinUrl(joinUrl)
+      setSessionId(data.id)
+
+      const QRCode = (await import('qrcode')).default
+      const qr = await QRCode.toDataURL(joinUrl, { width: 260, margin: 2, color: { dark: '#C9A84C', light: '#111827' } })
+      setLaunchQr(qr)
+
+      setStep(3)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to launch')
-      setLaunching(false)
+      setError(e instanceof Error ? e.message : 'Failed to create session')
     }
+    setLaunching(false)
+  }
+
+  function launch() {
+    if (sessionId) router.push(`/host/session/${sessionId}`)
   }
 
   function deleteSession(id: string) {
@@ -378,8 +362,8 @@ export default function HostPage() {
                   <h2 className="text-2xl font-black" style={{ color: '#F0F4FF' }}>Build Slides</h2>
                   <p className="text-sm mt-1" style={{ color: '#6B7A99' }}>AI generated {slides.length} slides. Click any slide to edit.</p>
                 </div>
-                <button onClick={goToStep3} disabled={generatingQuestions} className="btn-gold px-6 text-sm">
-                  {generatingQuestions ? <span className="flex items-center gap-2"><Spinner /> Preparing...</span> : 'Next: Interactions →'}
+                <button onClick={goToStep3} disabled={launching} className="btn-gold px-6 text-sm">
+                  {launching ? <span className="flex items-center gap-2"><Spinner /> Creating session...</span> : 'Next: Launch →'}
                 </button>
               </div>
 
@@ -404,42 +388,51 @@ export default function HostPage() {
             </div>
           )}
 
-          {/* ── STEP 3: INTERACTION ── */}
-          {step === 3 && (
-            <div className="fade-in space-y-4">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <h2 className="text-2xl font-black" style={{ color: '#F0F4FF' }}>Interaction Questions</h2>
-                  <p className="text-sm mt-1" style={{ color: '#6B7A99' }}>
-                    AI suggested {questions.length} questions. During the session, you control when participants see each question.
-                  </p>
-                </div>
-                <button onClick={launch} disabled={launching} className="btn-gold px-6 text-sm" style={{ background: 'linear-gradient(135deg,#48BB78,#68D391)', color: '#0A0E1A' }}>
-                  {launching ? <span className="flex items-center gap-2"><Spinner /> Launching...</span> : '🚀 Launch Session'}
-                </button>
-              </div>
-
-              <div className="card" style={{ borderColor: '#C9A84C33' }}>
-                <p className="text-xs font-semibold mb-1" style={{ color: '#C9A84C' }}>How interaction works during the session:</p>
-                <p className="text-xs" style={{ color: '#6B7A99' }}>
-                  Press <strong style={{ color: '#F0F4FF' }}>[Slide]</strong> → participants see slide content &nbsp;·&nbsp;
-                  Press <strong style={{ color: '#F0F4FF' }}>[Question]</strong> → participants see the question and can respond with text, voice, or image — multiple times until you move on.
+          {/* ── STEP 3: QR WAITING ROOM ── */}
+          {step === 3 && sessionId && (
+            <div className="fade-in space-y-6 max-w-xl mx-auto">
+              <div>
+                <h2 className="text-2xl font-black" style={{ color: '#F0F4FF' }}>Ready to Launch</h2>
+                <p className="text-sm mt-1" style={{ color: '#6B7A99' }}>
+                  Session created · {slides.length} slides · Share the QR code and start when ready
                 </p>
               </div>
 
-              {questions.map((q, i) => (
-                <div key={i} className="card-dark fade-in">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="tag tag-question">Question {i + 1}</span>
-                    <button onClick={() => setQuestions(questions.filter((_, j) => j !== i))} className="text-xs ml-auto px-2 py-1 rounded" style={{ color: '#6B7A99', background: '#0A0E1A' }}>✕</button>
-                  </div>
-                  <input className="input-field text-sm font-semibold mb-2" value={q.title} onChange={e => updateQuestion(i, 'title', e.target.value)} placeholder="Question title" />
-                  <textarea className="input-field text-sm" rows={2} value={q.content} onChange={e => updateQuestion(i, 'content', e.target.value)} placeholder="Question details or context" />
+              {/* QR Card */}
+              <div className="card flex flex-col items-center gap-5 py-8" style={{ borderColor: '#C9A84C40' }}>
+                {launchQr && (
+                  <img src={launchQr} alt="Join QR" className="rounded-2xl" style={{ width: 220 }} />
+                )}
+                <div className="text-center">
+                  <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: '#C9A84C' }}>Join URL</p>
+                  <p className="text-xs break-all" style={{ color: '#6B7A99' }}>{launchJoinUrl}</p>
                 </div>
-              ))}
+              </div>
 
-              <button onClick={addQuestion} className="btn-ghost w-full text-sm text-center">+ Add Question</button>
+              {/* Slide summary */}
+              <div className="card-dark space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#6B7A99' }}>
+                  Session Flow ({slides.length} steps)
+                </p>
+                {slides.map((s, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <span className="text-xs w-5 text-center flex-shrink-0" style={{ color: '#3A4A6A' }}>{i + 1}</span>
+                    <span className={`tag tag-${s.type} flex-shrink-0`}>{s.type}</span>
+                    <span className="text-sm truncate" style={{ color: '#B0BDD0' }}>{s.title}</span>
+                    {s.is_question && <span className="text-xs flex-shrink-0" style={{ color: '#9AE6B4' }}>💬</span>}
+                  </div>
+                ))}
+              </div>
+
               {error && <p className="text-sm text-red-400 bg-red-400/10 rounded-lg px-4 py-2">{error}</p>}
+
+              <button
+                onClick={launch}
+                className="btn-gold w-full text-center text-base"
+                style={{ background: 'linear-gradient(135deg,#48BB78,#68D391)', color: '#0A0E1A' }}
+              >
+                🚀 Start Session
+              </button>
             </div>
           )}
         </div>

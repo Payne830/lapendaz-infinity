@@ -68,6 +68,9 @@ function initSchema() {
   try {
     getDb().exec(`ALTER TABLE sessions ADD COLUMN live_mode TEXT NOT NULL DEFAULT 'slide'`)
   } catch { /* column already exists */ }
+  try {
+    getDb().exec(`ALTER TABLE sessions ADD COLUMN summary TEXT NOT NULL DEFAULT ''`)
+  } catch { /* column already exists */ }
 }
 
 export function createSession(id: string, title: string, goal: string, context: object) {
@@ -82,6 +85,10 @@ export function getSession(id: string) {
 
 export function updateSessionStatus(id: string, status: string) {
   return getDb().prepare('UPDATE sessions SET status = ? WHERE id = ?').run(status, id)
+}
+
+export function saveSessionSummary(id: string, summary: string) {
+  return getDb().prepare('UPDATE sessions SET summary = ? WHERE id = ?').run(summary, id)
 }
 
 export function updateSessionMode(id: string, mode: 'slide' | 'question') {
@@ -132,7 +139,7 @@ export function getResponses(session_id: string, step_id?: string) {
 export interface Session {
   id: string; title: string; goal: string; context: string
   status: 'setup' | 'live' | 'ended'; live_mode: 'slide' | 'question'
-  current_step: number; created_at: number
+  current_step: number; created_at: number; summary: string
 }
 export interface Step { id: string; session_id: string; step_order: number; type: string; title: string; content: string; is_question: number; image_url: string }
 export interface StepInput { id: string; session_id: string; step_order: number; type: string; title: string; content: string; is_question: boolean; image_url?: string }

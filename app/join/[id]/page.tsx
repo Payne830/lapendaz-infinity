@@ -10,6 +10,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
   const [name, setName] = useState('')
   const role = 'Officer'
   const [sessionTitle, setSessionTitle] = useState('')
+  const [sessionSummary, setSessionSummary] = useState('')
   const [steps, setSteps] = useState<Step[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [liveMode, setLiveMode] = useState<'slide' | 'question'>('slide')
@@ -33,7 +34,12 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
     const res = await fetch(`/api/sessions/${id}`)
     if (!res.ok) { setError('Session not found'); return }
     const data = await res.json()
-    if (data.session.status === 'ended') { setPhase('ended'); return }
+    if (data.session.status === 'ended') {
+      setSessionTitle(data.session.title)
+      setSessionSummary(data.session.summary || '')
+      setPhase('ended')
+      return
+    }
     setSessionTitle(data.session.title)
     setSteps(data.steps)
     setCurrentIndex(data.session.current_step)
@@ -74,7 +80,11 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
         const res = await fetch(`/api/sessions/${id}`)
         if (!res.ok) return
         const data = await res.json()
-        if (data.session.status === 'ended') { setPhase('ended'); return }
+        if (data.session.status === 'ended') {
+          setSessionSummary(data.session.summary || '')
+          setPhase('ended')
+          return
+        }
         if (data.session.status === 'live') {
           setCurrentIndex(prev => prev !== data.session.current_step ? data.session.current_step : prev)
           setLiveMode(data.session.live_mode)
@@ -263,11 +273,43 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
 
   /* ── ENDED ── */
   if (phase === 'ended') return (
-    <div className="min-h-screen flex items-center justify-center px-5">
-      <div className="text-center fade-in">
-        <div className="text-4xl mb-4">🌟</div>
-        <h1 className="text-2xl font-black mb-2" style={{ color: '#F0F4FF' }}>Session Complete</h1>
-        <p className="text-sm" style={{ color: '#6B7A99' }}>Thank you, {name}. Your host will share the report with you.</p>
+    <div className="min-h-screen flex flex-col px-5 py-8" style={{ maxWidth: 520, margin: '0 auto' }}>
+      <div className="fade-in space-y-5">
+        <div className="text-center pt-6 pb-2">
+          <div className="text-4xl mb-3">🌟</div>
+          <h1 className="text-2xl font-black mb-1" style={{ color: '#F0F4FF' }}>Session Complete</h1>
+          {name && <p className="text-sm" style={{ color: '#6B7A99' }}>Thank you, {name}.</p>}
+        </div>
+
+        {sessionSummary ? (
+          <div className="space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#C9A84C' }}>
+              {sessionTitle} — Session Report
+            </p>
+            <div className="rounded-xl p-4 text-sm leading-relaxed whitespace-pre-wrap"
+              style={{ background: '#111827', border: '1px solid #2A3A4A', color: '#D0D8F0', maxHeight: '60vh', overflowY: 'auto' }}>
+              {sessionSummary}
+            </div>
+            <button
+              onClick={() => {
+                const blob = new Blob([sessionSummary], { type: 'text/plain' })
+                const a = document.createElement('a')
+                a.href = URL.createObjectURL(blob)
+                a.download = `${sessionTitle || 'session'}-report.txt`
+                a.click()
+              }}
+              className="btn-gold w-full text-center text-sm"
+            >
+              ⬇ Download Report
+            </button>
+          </div>
+        ) : (
+          <div className="card text-center" style={{ borderColor: '#2A3A4A' }}>
+            <p className="text-sm" style={{ color: '#6B7A99' }}>
+              The host is generating the report. Refresh this page in a moment to see it.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )

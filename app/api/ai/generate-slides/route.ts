@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
 
     const prompt = `You are an expert session architect for Lapendaz — a human-nature-first, education-led company.
 
-Design a complete slide deck for this session:
+Design a complete session flow for:
 
 Title: ${context.title}
 Objective: ${context.objective}
@@ -18,14 +18,15 @@ Desired Outcome: ${context.outcome}
 Duration: ${context.duration}
 Atmosphere: ${context.atmosphere}
 
-Create 6-10 slides that guide participants through a meaningful journey.
+Create 8-12 slides that guide participants through a meaningful journey.
+Interleave question/reflection slides naturally after key concepts — do NOT put all questions at the end.
 
-Return ONLY valid JSON array, no explanation:
+Return ONLY a valid JSON array, no explanation:
 [
   {
     "type": "intro",
     "title": "Slide title",
-    "content": "Rich, engaging content (2-4 sentences). For slides: share insight or provoke thought. For questions: state clearly what you want participants to reflect on.",
+    "content": "Engaging content. For content slides: insight or provocation (2-3 sentences). For question/reflection: one clear open question the participant should think about or respond to.",
     "is_question": false
   }
 ]
@@ -33,11 +34,12 @@ Return ONLY valid JSON array, no explanation:
 Types: intro, slide, question, reflection, closing
 Rules:
 - is_question: true ONLY for type "question" or "reflection"
+- Distribute 2-4 question/reflection slides throughout the deck, not all at the end
+- Each question slide should follow the concept slide it relates to
 - Match the atmosphere: ${context.atmosphere}
-- Duration is ${context.duration} — pace the content accordingly
-- Slides should feel like a journey, building toward the outcome
+- Pace for ${context.duration} — intro → build concepts → reflection points → closing
 - Mix languages naturally if context suggests it (English + Chinese)
-- Make content specific, not generic`
+- Content must be specific to this session, not generic filler`
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
