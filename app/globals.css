@@ -121,3 +121,20 @@ body {
   border-radius: 50%;
   animation: pulse-gold 1.5s infinite;
 }
+
+/* Report markdown rendering */
+.report-body { color: #D0D8F0; font-size: 0.875rem; line-height: 1.7; }
+.report-body h1 { color: #F0F4FF; font-size: 1.25rem; font-weight: 900; margin: 0 0 0.5rem; }
+.report-body h2 { color: #C9A84C; font-size: 1rem; font-weight: 700; margin: 1.25rem 0 0.5rem; border-bottom: 1px solid rgba(201,168,76,0.2); padding-bottom: 0.25rem; }
+.report-body h3 { color: #90CDF4; font-size: 0.875rem; font-weight: 700; margin: 1rem 0 0.25rem; }
+.report-body p { margin: 0.4rem 0; }
+.report-body ul, .report-body ol { padding-left: 1.25rem; margin: 0.4rem 0; }
+.report-body li { margin: 0.2rem 0; }
+.report-body blockquote { border-left: 3px solid #C9A84C; padding-left: 0.75rem; color: rgba(208,216,240,0.8); font-style: italic; margin: 0.5rem 0; }
+.report-body strong { color: #F0F4FF; font-weight: 700; }
+.report-body em { color: rgba(208,216,240,0.75); }
+.report-body hr { border: none; border-top: 1px solid #2A3A4A; margin: 1rem 0; }
+.report-body table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin: 0.5rem 0; }
+.report-body th { background: rgba(201,168,76,0.1); color: #C9A84C; font-weight: 700; padding: 0.4rem 0.6rem; text-align: left; border: 1px solid #2A3A4A; }
+.report-body td { padding: 0.35rem 0.6rem; border: 1px solid #2A3A4A; color: #B0BDD0; }
+.report-body code { background: rgba(255,255,255,0.06); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.8rem; }

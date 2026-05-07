@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, use } from 'react'
 import QRCode from 'qrcode'
+import ReactMarkdown from 'react-markdown'
 
 interface Step { id: string; step_order: number; type: string; title: string; content: string; is_question: number; image_url: string }
 interface Response { id: string; participant_name: string; participant_role: string; content: string; type: string; step_id: string }
@@ -288,19 +289,19 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
                 </div>
                 {summary ? (
                   <>
-                    <div className="rounded-xl p-4 text-sm leading-relaxed whitespace-pre-wrap" style={{ background: '#0A0E1A', color: '#D0D8F0', maxHeight: 400, overflowY: 'auto' }}>
-                      {summary}
+                    <div className="rounded-xl p-4 overflow-y-auto report-body" style={{ background: '#0A0E1A', maxHeight: 440 }}>
+                      <ReactMarkdown>{summary}</ReactMarkdown>
                     </div>
                     <button
                       onClick={() => {
-                        const blob = new Blob([summary], { type: 'text/plain' })
+                        const blob = new Blob([summary], { type: 'text/markdown' })
                         const a = document.createElement('a')
                         a.href = URL.createObjectURL(blob)
-                        a.download = `${session.title}-report.txt`
+                        a.download = `${session.title}-report.md`
                         a.click()
                       }}
                       className="btn-ghost text-sm mt-3"
-                    >⬇ Download Report</button>
+                    >⬇ Download Report (.md)</button>
                   </>
                 ) : (
                   <p className="text-sm" style={{ color: '#6B7A99' }}>Click Generate Report to create an AI analysis and minutes.</p>

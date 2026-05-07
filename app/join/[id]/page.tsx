@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, use, useRef, useCallback } from 'react'
+import ReactMarkdown from 'react-markdown'
 
 interface Step { id: string; title: string; content: string; type: string; is_question: number; image_url: string }
 
@@ -286,16 +287,16 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
             <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#C9A84C' }}>
               {sessionTitle} — Session Report
             </p>
-            <div className="rounded-xl p-4 text-sm leading-relaxed whitespace-pre-wrap"
-              style={{ background: '#111827', border: '1px solid #2A3A4A', color: '#D0D8F0', maxHeight: '60vh', overflowY: 'auto' }}>
-              {sessionSummary}
+            <div className="rounded-xl p-4 report-body overflow-y-auto"
+              style={{ background: '#111827', border: '1px solid #2A3A4A', maxHeight: '60vh' }}>
+              <ReactMarkdown>{sessionSummary}</ReactMarkdown>
             </div>
             <button
               onClick={() => {
-                const blob = new Blob([sessionSummary], { type: 'text/plain' })
+                const blob = new Blob([sessionSummary], { type: 'text/markdown' })
                 const a = document.createElement('a')
                 a.href = URL.createObjectURL(blob)
-                a.download = `${sessionTitle || 'session'}-report.txt`
+                a.download = `${sessionTitle || 'session'}-report.md`
                 a.click()
               }}
               className="btn-gold w-full text-center text-sm"

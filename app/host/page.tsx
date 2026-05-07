@@ -19,6 +19,8 @@ interface Context {
   outcome: string
   duration: string
   atmosphere: string
+  session_type: string
+  attribution: string
 }
 
 interface Slide {
@@ -37,12 +39,19 @@ interface SavedSession {
 }
 
 const ATMOSPHERE_OPTIONS = ['Professional', 'Casual & Warm', 'Energetic', 'Inspirational', 'Structured & Formal']
+const SESSION_TYPE_OPTIONS = ['Meeting', 'Workshop', 'Forum', 'Training']
+const ATTRIBUTION_OPTIONS = [
+  { value: 'named', label: 'Named', desc: 'Full name in report' },
+  { value: 'role', label: 'Role Only', desc: 'e.g. "CEO"' },
+  { value: 'anonymous', label: 'Anonymous', desc: 'No attribution' },
+]
 const STEP_LABELS = ['Context', 'Build Slides', 'Ready to Launch']
 const DRAFT_KEY = 'lapendaz_draft_ctx'
 const SESSIONS_KEY = 'lapendaz_saved_sessions'
 
 const DEFAULT_CTX: Context = {
-  title: '', objective: '', participants: '', outcome: '', duration: '', atmosphere: 'Inspirational'
+  title: '', objective: '', participants: '', outcome: '', duration: '',
+  atmosphere: 'Inspirational', session_type: 'Meeting', attribution: 'named',
 }
 
 export default function HostPage() {
@@ -140,7 +149,7 @@ export default function HostPage() {
   }
 
   function step1Valid() {
-    return ctx.title && ctx.objective && ctx.participants && ctx.outcome && ctx.duration && ctx.atmosphere
+    return ctx.title && ctx.objective && ctx.participants && ctx.outcome && ctx.duration && ctx.atmosphere && ctx.session_type && ctx.attribution
   }
 
   async function generateSlides() {
@@ -414,6 +423,45 @@ export default function HostPage() {
                         }}
                       >
                         {opt}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+
+                <Field label="6. What type of session is this?" hint="Determines the report format and depth">
+                  <div className="flex flex-wrap gap-2">
+                    {SESSION_TYPE_OPTIONS.map(opt => (
+                      <button
+                        key={opt}
+                        onClick={() => updateCtx('session_type', opt)}
+                        className="px-4 py-2 rounded-full text-sm font-semibold transition-all"
+                        style={{
+                          background: ctx.session_type === opt ? 'linear-gradient(135deg,#C9A84C,#E8C97A)' : '#1E2A3A',
+                          color: ctx.session_type === opt ? '#0A0E1A' : '#6B7A99',
+                          border: ctx.session_type === opt ? 'none' : '1px solid #2A3A4A',
+                        }}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+
+                <Field label="7. How should participants be credited in the report?" hint="Applies to all responses recorded during the session">
+                  <div className="flex flex-wrap gap-2">
+                    {ATTRIBUTION_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateCtx('attribution', opt.value)}
+                        className="px-4 py-2 rounded-full text-sm font-semibold transition-all text-left"
+                        style={{
+                          background: ctx.attribution === opt.value ? 'linear-gradient(135deg,#C9A84C,#E8C97A)' : '#1E2A3A',
+                          color: ctx.attribution === opt.value ? '#0A0E1A' : '#6B7A99',
+                          border: ctx.attribution === opt.value ? 'none' : '1px solid #2A3A4A',
+                        }}
+                      >
+                        <span className="font-bold">{opt.label}</span>
+                        <span className="text-xs ml-2 opacity-70">{opt.desc}</span>
                       </button>
                     ))}
                   </div>
