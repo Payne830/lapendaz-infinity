@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 
-const openai = new OpenAI()
-
 export async function POST(req: NextRequest) {
+  // Instantiate inside handler — build-time has no API key, runtime does
+  const openai = new OpenAI()
   try {
     const formData = await req.formData()
     const file = formData.get('audio') as File | null
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     const transcription = await openai.audio.transcriptions.create({
       file,
       model: 'whisper-1',
-      // no language specified — Whisper auto-detects Chinese/English/mixed
+      // no language — Whisper auto-detects Chinese/English/mixed
     })
 
     return NextResponse.json({ text: transcription.text })
