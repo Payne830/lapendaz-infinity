@@ -68,6 +68,47 @@ export default function HostPage() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
+  const [aiDialog, setAiDialog] = useState<{ field: 'objective' | 'outcome'; step: number; answers: string[] } | null>(null)
+  const [aiDialogInput, setAiDialogInput] = useState('')
+  const [aiDialogLoading, setAiDialogLoading] = useState(false)
+
+  const AI_QUESTIONS: Record<'objective' | 'outcome', string[]> = {
+    objective: [
+      'What is the ONE thing you most want participants to think or feel differently about after this session?',
+      'What problem or opportunity is this session addressing right now in your organisation?',
+      'What would make you say "this session was a success" immediately after it ends?',
+    ],
+    outcome: [
+      'What specific action, decision, or commitment do you want each participant to make?',
+      'How will you know — in 1 week — that this session had real impact?',
+      'What do participants currently lack that this session should give them?',
+    ],
+  }
+
+  async function submitAiDialog() {
+    if (!aiDialog) return
+    const answers = [...aiDialog.answers, aiDialogInput]
+    if (aiDialog.step < 2) {
+      setAiDialog({ ...aiDialog, step: aiDialog.step + 1, answers })
+      setAiDialogInput('')
+      return
+    }
+    // All 3 answers collected — call API
+    setAiDialogLoading(true)
+    try {
+      const res = await fetch('/api/ai/refine-field', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field: aiDialog.field, context: ctx, answers }),
+      })
+      const data = await res.json()
+      if (data.content) updateCtx(aiDialog.field, data.content)
+    } catch { /* ignore */ }
+    setAiDialogLoading(false)
+    setAiDialog(null)
+    setAiDialogInput('')
+  }
+
   // Load draft and saved sessions on mount
   useEffect(() => {
     try {
@@ -335,17 +376,25 @@ export default function HostPage() {
                   <input className="input-field" placeholder="e.g. Officer AI Architecture Transformation" value={ctx.title} onChange={e => updateCtx('title', e.target.value)} />
                 </Field>
 
-                <Field label="1. What is the objective of this session?" hint="e.g. Introduce AI tools, shift mindset from execution to strategy">
+                <FieldWithAI
+                  label="1. What is the objective of this session?"
+                  hint="e.g. Introduce AI tools, shift mindset from execution to strategy"
+                  onAI={() => { setAiDialog({ field: 'objective', step: 0, answers: [] }); setAiDialogInput('') }}
+                >
                   <textarea className="input-field" rows={2} placeholder="We want to..." value={ctx.objective} onChange={e => updateCtx('objective', e.target.value)} />
-                </Field>
+                </FieldWithAI>
 
                 <Field label="2. Who are your participants?" hint="e.g. 7 senior Officers — CVO, CFO, CEO, CTO, CDO, CGO, CIO">
                   <textarea className="input-field" rows={2} placeholder="My participants are..." value={ctx.participants} onChange={e => updateCtx('participants', e.target.value)} />
                 </Field>
 
-                <Field label="3. What is the final outcome you want at the end of this session?" hint="e.g. Each Officer leaves with one AI tool they will use this week">
+                <FieldWithAI
+                  label="3. What is the final outcome you want at the end of this session?"
+                  hint="e.g. Each Officer leaves with one AI tool they will use this week"
+                  onAI={() => { setAiDialog({ field: 'outcome', step: 0, answers: [] }); setAiDialogInput('') }}
+                >
                   <textarea className="input-field" rows={2} placeholder="By the end, participants will..." value={ctx.outcome} onChange={e => updateCtx('outcome', e.target.value)} />
-                </Field>
+                </FieldWithAI>
 
                 <Field label="4. How long is your session?" hint="e.g. 90 minutes, 2 hours">
                   <input className="input-field" placeholder="e.g. 90 minutes" value={ctx.duration} onChange={e => updateCtx('duration', e.target.value)} />
@@ -370,6 +419,51 @@ export default function HostPage() {
                   </div>
                 </Field>
               </div>
+
+              {/* AI Dialog overlay */}
+              {aiDialog && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
+                  <div className="card w-full max-w-md fade-in" style={{ borderColor: 'rgba(201,168,76,0.4)' }}>
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#C9A84C' }}>
+                        ✨ AI Assistant — {aiDialog.field === 'objective' ? 'Objective' : 'Outcome'}
+                      </p>
+                      <button onClick={() => { setAiDialog(null); setAiDialogInput('') }} style={{ color: '#6B7A99' }}>✕</button>
+                    </div>
+                    <p className="text-sm font-semibold mb-1" style={{ color: '#F0F4FF' }}>
+                      Question {aiDialog.step + 1} of 3
+                    </p>
+                    <p className="text-sm mb-4 leading-relaxed" style={{ color: '#B0BDD0' }}>
+                      {AI_QUESTIONS[aiDialog.field][aiDialog.step]}
+                    </p>
+                    <textarea
+                      className="input-field text-sm w-full"
+                      rows={3}
+                      placeholder="Your answer..."
+                      value={aiDialogInput}
+                      onChange={e => setAiDialogInput(e.target.value)}
+                      autoFocus
+                      onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) submitAiDialog() }}
+                    />
+                    <div className="flex gap-3 mt-4">
+                      <button
+                        onClick={submitAiDialog}
+                        disabled={!aiDialogInput.trim() || aiDialogLoading}
+                        className="btn-gold flex-1 text-sm"
+                      >
+                        {aiDialogLoading ? <span className="flex items-center justify-center gap-2"><Spinner /> Writing...</span>
+                          : aiDialog.step < 2 ? 'Next →' : '✨ Generate'}
+                      </button>
+                    </div>
+                    {/* Progress dots */}
+                    <div className="flex justify-center gap-2 mt-3">
+                      {[0, 1, 2].map(i => (
+                        <div key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: i <= aiDialog.step ? '#C9A84C' : '#2A3A4A' }} />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {error && <p className="text-sm text-red-400 bg-red-400/10 rounded-lg px-4 py-2">{error}</p>}
 
@@ -746,6 +840,25 @@ function Field({ label, hint, children }: { label: string; hint: string; childre
   return (
     <div>
       <label className="block text-sm font-semibold mb-1" style={{ color: '#C9A84C' }}>{label}</label>
+      <p className="text-xs mb-2" style={{ color: '#6B7A99' }}>{hint}</p>
+      {children}
+    </div>
+  )
+}
+
+function FieldWithAI({ label, hint, onAI, children }: { label: string; hint: string; onAI: () => void; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-sm font-semibold" style={{ color: '#C9A84C' }}>{label}</label>
+        <button
+          onClick={onAI}
+          className="text-xs px-2.5 py-1 rounded-full font-semibold flex-shrink-0"
+          style={{ background: 'rgba(201,168,76,0.12)', color: '#C9A84C', border: '1px solid rgba(201,168,76,0.35)' }}
+        >
+          ✨ AI
+        </button>
+      </div>
       <p className="text-xs mb-2" style={{ color: '#6B7A99' }}>{hint}</p>
       {children}
     </div>
