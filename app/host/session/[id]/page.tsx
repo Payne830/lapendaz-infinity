@@ -7,6 +7,19 @@ interface Step { id: string; step_order: number; type: string; title: string; co
 interface Response { id: string; participant_name: string; participant_role: string; content: string; type: string; step_id: string }
 interface Participant { id: string; name: string; role: string }
 
+const SESSION_SLIDE_BG: Record<string, string> = {
+  intro:      'linear-gradient(135deg, #1A1200 0%, #2A1E00 100%)',
+  slide:      'linear-gradient(135deg, #0A0E1A 0%, #111827 100%)',
+  question:   'linear-gradient(135deg, #0D1A0D 0%, #1A2A1A 100%)',
+  reflection: 'linear-gradient(135deg, #130D1A 0%, #1E1228 100%)',
+  closing:    'linear-gradient(135deg, #1A0D0D 0%, #2A1212 100%)',
+}
+const SESSION_SLIDE_ACCENT: Record<string, string> = {
+  intro: '#E8C97A', slide: '#90CDF4', question: '#9AE6B4', reflection: '#D6BCFA', closing: '#FBD38D',
+}
+function getSessionSlideBg(type: string) { return SESSION_SLIDE_BG[type] ?? SESSION_SLIDE_BG.slide }
+function getSessionSlideAccent(type: string) { return SESSION_SLIDE_ACCENT[type] ?? '#C9A84C' }
+
 export default function HostSession({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const [session, setSession] = useState<{ title: string; status: string; current_step: number; live_mode: string } | null>(null)
@@ -281,22 +294,32 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
                 {/* Progress bar */}
                 <div className="flex gap-1">
                   {steps.map((_, i) => (
-                    <div key={i} className="flex-1 h-1.5 rounded-full transition-all"
+                    <div key={i} className="flex-1 h-1 rounded-full transition-all"
                       style={{ background: i < session.current_step ? '#C9A84C' : i === session.current_step ? '#E8C97A' : '#2A3A4A' }} />
                   ))}
                 </div>
-                <p className="text-xs" style={{ color: '#6B7A99' }}>Step {session.current_step + 1} / {steps.length}</p>
 
                 {/* Current slide */}
-                <div className="rounded-xl overflow-hidden" style={{ minHeight: 200, border: '1px solid #2A3A4A', position: 'relative',
-                  background: currentStep.image_url ? `url(${currentStep.image_url}) center/cover no-repeat` : '#111827' }}>
-                  {currentStep.image_url && <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg,rgba(0,0,0,0.65),rgba(0,0,0,0.4))' }} />}
-                  <div className="relative z-10 p-8">
-                    <div className="flex items-center gap-2 mb-3">
+                <div className="rounded-2xl overflow-hidden flex-1" style={{
+                  minHeight: 340,
+                  border: '1px solid #2A3A4A',
+                  position: 'relative',
+                  background: getSessionSlideBg(currentStep.type),
+                }}>
+                  <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: getSessionSlideAccent(currentStep.type) }} />
+                  <div className="relative z-10 p-10 h-full flex flex-col justify-center">
+                    <div className="flex items-center gap-2 mb-4">
                       <span className={`tag tag-${currentStep.type}`}>{currentStep.type}</span>
+                      <span className="text-xs" style={{ color: '#3A4A6A' }}>
+                        {session.current_step + 1} / {steps.length}
+                      </span>
                     </div>
-                    <h2 className="text-2xl font-bold mb-3" style={{ color: '#FFFFFF', textShadow: currentStep.image_url ? '0 2px 8px rgba(0,0,0,0.8)' : 'none' }}>{currentStep.title}</h2>
-                    <p className="text-base leading-relaxed" style={{ color: currentStep.image_url ? 'rgba(255,255,255,0.85)' : '#B0BDD0', textShadow: currentStep.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none' }}>{currentStep.content}</p>
+                    <h2 className="font-black mb-4 leading-tight" style={{ color: '#FFFFFF', fontSize: currentStep.title.length > 50 ? '1.6rem' : '2.2rem' }}>
+                      {currentStep.title}
+                    </h2>
+                    <p className="leading-relaxed" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '1.05rem', maxWidth: '80%' }}>
+                      {currentStep.content}
+                    </p>
                   </div>
                 </div>
 

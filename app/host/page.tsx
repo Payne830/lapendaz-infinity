@@ -448,16 +448,65 @@ export default function HostPage() {
   )
 }
 
-const SLIDE_BG: Record<string, string> = {
-  intro:      'linear-gradient(135deg, #1A1200 0%, #2A1E00 100%)',
-  slide:      'linear-gradient(135deg, #0A0E1A 0%, #111827 100%)',
-  question:   'linear-gradient(135deg, #0D1A0D 0%, #1A2A1A 100%)',
-  reflection: 'linear-gradient(135deg, #130D1A 0%, #1E1228 100%)',
-  closing:    'linear-gradient(135deg, #1A0D0D 0%, #2A1212 100%)',
+type SlideType = 'intro' | 'slide' | 'question' | 'reflection' | 'closing'
+
+const ATMOSPHERE_PALETTES: Record<string, { accent: string; bgs: Record<SlideType, string> }> = {
+  'Professional': {
+    accent: '#90CDF4',
+    bgs: {
+      intro:      'linear-gradient(135deg, #0D1B2A 0%, #1E3A5F 100%)',
+      slide:      'linear-gradient(135deg, #0A1525 0%, #112035 100%)',
+      question:   'linear-gradient(135deg, #091A2A 0%, #0E2535 100%)',
+      reflection: 'linear-gradient(135deg, #0D1525 0%, #152535 100%)',
+      closing:    'linear-gradient(135deg, #0D1B2A 0%, #1A3050 100%)',
+    },
+  },
+  'Casual & Warm': {
+    accent: '#F6AD55',
+    bgs: {
+      intro:      'linear-gradient(135deg, #2D1505 0%, #4A2510 100%)',
+      slide:      'linear-gradient(135deg, #1A0E05 0%, #2D1A0A 100%)',
+      question:   'linear-gradient(135deg, #1A1205 0%, #2D200A 100%)',
+      reflection: 'linear-gradient(135deg, #200A05 0%, #351510 100%)',
+      closing:    'linear-gradient(135deg, #2D1505 0%, #4A2510 100%)',
+    },
+  },
+  'Energetic': {
+    accent: '#F687B3',
+    bgs: {
+      intro:      'linear-gradient(135deg, #1A0530 0%, #2D0A4A 100%)',
+      slide:      'linear-gradient(135deg, #0D0520 0%, #1A0A35 100%)',
+      question:   'linear-gradient(135deg, #050D30 0%, #0A1A4A 100%)',
+      reflection: 'linear-gradient(135deg, #200535 0%, #350A4A 100%)',
+      closing:    'linear-gradient(135deg, #1A0530 0%, #2D0A4A 100%)',
+    },
+  },
+  'Inspirational': {
+    accent: '#E8C97A',
+    bgs: {
+      intro:      'linear-gradient(135deg, #1A1200 0%, #2A1E00 100%)',
+      slide:      'linear-gradient(135deg, #0A0E1A 0%, #111827 100%)',
+      question:   'linear-gradient(135deg, #0D1A0D 0%, #1A2A1A 100%)',
+      reflection: 'linear-gradient(135deg, #130D1A 0%, #1E1228 100%)',
+      closing:    'linear-gradient(135deg, #1A0D0D 0%, #2A1212 100%)',
+    },
+  },
+  'Structured & Formal': {
+    accent: '#A0AEC0',
+    bgs: {
+      intro:      'linear-gradient(135deg, #0A0F14 0%, #1A2535 100%)',
+      slide:      'linear-gradient(135deg, #080C10 0%, #12202E 100%)',
+      question:   'linear-gradient(135deg, #080E0A 0%, #101A12 100%)',
+      reflection: 'linear-gradient(135deg, #0A0810 0%, #14101E 100%)',
+      closing:    'linear-gradient(135deg, #0A0F14 0%, #1A2535 100%)',
+    },
+  },
 }
 
-const SLIDE_ACCENT: Record<string, string> = {
-  intro: '#E8C97A', slide: '#90CDF4', question: '#9AE6B4', reflection: '#D6BCFA', closing: '#FBD38D',
+function getSlideTheme(atmosphere: string, type: string): { accent: string; bg: string } {
+  const palette = ATMOSPHERE_PALETTES[atmosphere] ?? ATMOSPHERE_PALETTES['Inspirational']
+  const bg = palette.bgs[type as SlideType] ?? palette.bgs.slide
+  return { accent: palette.accent, bg }
 }
 
 interface SlideCardProps {
@@ -474,88 +523,53 @@ interface SlideCardProps {
 
 function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, onRemove, onPromptChange, onRegenerate }: SlideCardProps) {
   const [editing, setEditing] = useState(false)
-  const [generatingImage, setGeneratingImage] = useState(false)
-  const accent = SLIDE_ACCENT[slide.type] || '#C9A84C'
-  const bg = SLIDE_BG[slide.type] || SLIDE_BG.slide
-
-  async function generateImage() {
-    setGeneratingImage(true)
-    try {
-      const res = await fetch('/api/ai/generate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: slide.title, content: slide.content, type: slide.type, atmosphere }),
-      })
-      const data = await res.json()
-      if (data.url) onUpdate('image_url', data.url)
-    } catch { /* ignore */ }
-    setGeneratingImage(false)
-  }
+  const { accent, bg } = getSlideTheme(atmosphere, slide.type)
 
   return (
-    <div className="fade-in rounded-xl overflow-hidden" style={{ border: `1px solid ${slide.image_url ? accent + '40' : '#2A3A4A'}` }}>
+    <div className="fade-in rounded-xl overflow-hidden" style={{ border: `1px solid ${accent}30` }}>
       {/* ── Visual Slide Preview ── */}
       <div
         className="relative cursor-pointer group"
-        style={{
-          minHeight: 220,
-          background: slide.image_url ? `url(${slide.image_url}) center/cover no-repeat` : bg,
-        }}
+        style={{ minHeight: 220, background: bg }}
         onClick={() => setEditing(e => !e)}
       >
-        <div className="absolute inset-0 rounded-t-xl" style={{
-          background: slide.image_url
-            ? 'linear-gradient(135deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.4) 100%)'
-            : 'transparent'
-        }} />
+        <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl" style={{ background: accent }} />
 
-        {!slide.image_url && <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: accent }} />}
-
-        <span className="absolute top-4 left-4 text-xs font-bold z-10" style={{ color: slide.image_url ? 'rgba(255,255,255,0.5)' : '#3A4A6A' }}>{index + 1}</span>
+        <span className="absolute top-4 left-5 text-xs font-bold z-10" style={{ color: 'rgba(255,255,255,0.3)' }}>{index + 1}</span>
 
         <span className="absolute top-4 right-12 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider z-10"
-          style={{ background: `${accent}25`, color: accent, border: `1px solid ${accent}50`, backdropFilter: 'blur(4px)' }}>
+          style={{ background: `${accent}20`, color: accent, border: `1px solid ${accent}40` }}>
           {slide.type}
         </span>
 
         <button onClick={e => { e.stopPropagation(); onRemove() }}
           className="absolute top-4 right-4 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
-          style={{ color: '#fff' }}>✕</button>
+          style={{ color: 'rgba(255,255,255,0.5)' }}>✕</button>
 
         <div className="relative z-10 px-8 py-8 ml-2">
           {slide.is_question && (
             <p className="text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: accent }}>💬 Interaction Required</p>
           )}
           <h3 className="font-black mb-3 leading-tight"
-            style={{ color: '#FFFFFF', fontSize: slide.title.length > 40 ? '1.1rem' : '1.5rem', textShadow: slide.image_url ? '0 2px 8px rgba(0,0,0,0.8)' : 'none' }}>
+            style={{ color: '#FFFFFF', fontSize: slide.title.length > 40 ? '1.1rem' : '1.5rem' }}>
             {slide.title || <span style={{ color: '#3A4A6A' }}>Untitled slide</span>}
           </h3>
-          <p className="text-sm leading-relaxed"
-            style={{ color: slide.image_url ? 'rgba(255,255,255,0.85)' : '#8090A8', textShadow: slide.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none' }}>
+          <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.65)' }}>
             {slide.content
               ? slide.content.length > 160 ? slide.content.slice(0, 160) + '...' : slide.content
               : <span style={{ color: '#3A4A6A' }}>No content yet</span>}
           </p>
         </div>
 
-        <button
-          onClick={e => { e.stopPropagation(); generateImage() }}
-          disabled={generatingImage}
-          className="absolute bottom-3 left-4 z-10 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all opacity-0 group-hover:opacity-100"
-          style={{ background: 'rgba(0,0,0,0.6)', color: accent, border: `1px solid ${accent}50`, backdropFilter: 'blur(4px)' }}
-        >
-          {generatingImage ? <><Spinner /> Generating...</> : slide.image_url ? '🎨 New Image' : '🎨 Generate Image'}
-        </button>
-
         <div className="absolute bottom-3 right-4 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
-          style={{ color: 'rgba(255,255,255,0.5)' }}>
+          style={{ color: 'rgba(255,255,255,0.4)' }}>
           {editing ? 'Collapse ↑' : 'Edit ↓'}
         </div>
       </div>
 
       {/* ── Edit Panel ── */}
       {editing && (
-        <div className="p-4 space-y-3 fade-in" style={{ background: '#0D1220', borderTop: `1px solid ${accent}30` }}>
+        <div className="p-4 space-y-3 fade-in" style={{ background: '#0D1220', borderTop: `1px solid ${accent}25` }}>
           <div className="flex items-center gap-3">
             <select value={slide.type} onChange={e => onUpdate('type', e.target.value)}
               className="text-xs px-3 py-1.5 rounded-full font-semibold"
@@ -573,10 +587,7 @@ function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, o
             <input className="input-field text-xs flex-1" placeholder="Tell AI how to improve this slide..."
               value={prompt} onChange={e => onPromptChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && onRegenerate()} />
             <button onClick={onRegenerate} disabled={regenerating} className="btn-ghost text-xs px-3 flex-shrink-0">
-              {regenerating ? <Spinner /> : '↺ Text'}
-            </button>
-            <button onClick={generateImage} disabled={generatingImage} className="btn-ghost text-xs px-3 flex-shrink-0" style={{ borderColor: accent, color: accent }}>
-              {generatingImage ? <Spinner /> : '🎨 Image'}
+              {regenerating ? <Spinner /> : '↺ Regenerate'}
             </button>
           </div>
         </div>
