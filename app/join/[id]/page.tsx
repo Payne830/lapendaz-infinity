@@ -141,10 +141,29 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
 
   const toggleVoice = useCallback(async () => {
     if (isListening) {
-      // Stop recording
       mediaRecorderRef.current?.stop()
       return
     }
+
+    // Check browser support before attempting
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError('此浏览器不支持录音，请使用 Chrome 浏览器')
+      return
+    }
+    if (typeof MediaRecorder === 'undefined') {
+      setError('此浏览器不支持录音，请使用 Chrome 浏览器')
+      return
+    }
+
+    // Pick best supported MIME type (Huawei/Firefox/Chrome all differ)
+    const MIME_CANDIDATES = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/ogg',
+      'audio/mp4',
+    ]
+    const mimeType = MIME_CANDIDATES.find(t => MediaRecorder.isTypeSupported(t)) ?? ''
 
     setError('')
     try {
@@ -152,7 +171,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
       startWaveform(stream)
 
       const chunks: Blob[] = []
-      const mr = new MediaRecorder(stream)
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {})
       mediaRecorderRef.current = mr
 
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data) }
@@ -162,12 +181,13 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
         stream.getTracks().forEach(t => t.stop())
         setIsListening(false)
 
-        const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' })
-        if (blob.size < 500) return  // too short, skip transcription
+        const usedMime = mr.mimeType || mimeType || 'audio/webm'
+        const blob = new Blob(chunks, { type: usedMime })
+        if (blob.size < 500) { setError('录音太短，请重试'); return }
 
         setTranscribing(true)
         try {
-          const ext = mr.mimeType.includes('mp4') ? 'mp4' : mr.mimeType.includes('ogg') ? 'ogg' : 'webm'
+          const ext = usedMime.includes('mp4') ? 'mp4' : usedMime.includes('ogg') ? 'ogg' : 'webm'
           const fd = new FormData()
           fd.append('audio', blob, `recording.${ext}`)
           const res = await fetch('/api/transcribe', { method: 'POST', body: fd })
