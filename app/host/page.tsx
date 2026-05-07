@@ -1,7 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 type WizardStep = 1 | 2 | 3
 
@@ -15,6 +22,7 @@ interface Context {
 }
 
 interface Slide {
+  id: string
   type: 'intro' | 'slide' | 'question' | 'reflection' | 'closing'
   title: string
   content: string
@@ -54,6 +62,11 @@ export default function HostPage() {
   const [launchQr, setLaunchQr] = useState('')
   const [launchJoinUrl, setLaunchJoinUrl] = useState('')
   const [error, setError] = useState('')
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
 
   // Load draft and saved sessions on mount
   useEffect(() => {
@@ -100,8 +113,10 @@ export default function HostPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setSlides(data.slides)
-      setSlidePrompts(data.slides.map(() => ''))
+      // Assign stable IDs for drag-and-drop
+      const withIds = data.slides.map((s: Omit<Slide, 'id'>, i: number) => ({ ...s, id: `slide-${Date.now()}-${i}` }))
+      setSlides(withIds)
+      setSlidePrompts(withIds.map(() => ''))
       setStep(2)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to generate slides')
@@ -119,7 +134,7 @@ export default function HostPage() {
       })
       const data = await res.json()
       const updated = [...slides]
-      updated[index] = data.slide
+      updated[index] = { ...data.slide, id: slides[index].id }
       setSlides(updated)
       const updatedPrompts = [...slidePrompts]
       updatedPrompts[index] = ''
@@ -140,9 +155,28 @@ export default function HostPage() {
     setSlidePrompts(slidePrompts.filter((_, i) => i !== index))
   }
 
-  function addSlide() {
-    setSlides([...slides, { type: 'slide', title: 'New Slide', content: '', is_question: false }])
-    setSlidePrompts([...slidePrompts, ''])
+  function addSlide(afterIndex?: number) {
+    const newSlide: Slide = { id: `slide-${Date.now()}`, type: 'slide', title: 'New Slide', content: '', is_question: false }
+    if (afterIndex !== undefined) {
+      const newSlides = [...slides]
+      newSlides.splice(afterIndex + 1, 0, newSlide)
+      const newPrompts = [...slidePrompts]
+      newPrompts.splice(afterIndex + 1, 0, '')
+      setSlides(newSlides)
+      setSlidePrompts(newPrompts)
+    } else {
+      setSlides([...slides, newSlide])
+      setSlidePrompts([...slidePrompts, ''])
+    }
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = slides.findIndex(s => s.id === active.id)
+    const newIndex = slides.findIndex(s => s.id === over.id)
+    setSlides(arrayMove(slides, oldIndex, newIndex))
+    setSlidePrompts(arrayMove(slidePrompts, oldIndex, newIndex))
   }
 
   async function goToStep3() {
@@ -367,22 +401,37 @@ export default function HostPage() {
                 </button>
               </div>
 
-              {slides.map((s, i) => (
-                <SlideCard
-                  key={i}
-                  index={i}
-                  slide={s}
-                  atmosphere={ctx.atmosphere}
-                  prompt={slidePrompts[i] || ''}
-                  regenerating={regeneratingIndex === i}
-                  onUpdate={(field, val) => updateSlide(i, field, val)}
-                  onRemove={() => removeSlide(i)}
-                  onPromptChange={val => { const p = [...slidePrompts]; p[i] = val; setSlidePrompts(p) }}
-                  onRegenerate={() => regenerateSlide(i)}
-                />
-              ))}
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={slides.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                  {slides.map((s, i) => (
+                    <div key={s.id}>
+                      <SlideCard
+                        index={i}
+                        slide={s}
+                        atmosphere={ctx.atmosphere}
+                        prompt={slidePrompts[i] || ''}
+                        regenerating={regeneratingIndex === i}
+                        onUpdate={(field, val) => updateSlide(i, field, val)}
+                        onRemove={() => removeSlide(i)}
+                        onPromptChange={val => { const p = [...slidePrompts]; p[i] = val; setSlidePrompts(p) }}
+                        onRegenerate={() => regenerateSlide(i)}
+                      />
+                      {/* Insert button between slides */}
+                      <div className="flex items-center justify-center py-1 opacity-0 hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => addSlide(i)}
+                          className="text-xs px-3 py-1 rounded-full"
+                          style={{ background: '#1E2A3A', color: '#6B7A99', border: '1px dashed #3A4A6A' }}
+                        >
+                          + Insert slide here
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </SortableContext>
+              </DndContext>
 
-              <button onClick={addSlide} className="btn-ghost w-full text-sm text-center py-4" style={{ borderStyle: 'dashed' }}>
+              <button onClick={() => addSlide()} className="btn-ghost w-full text-sm text-center py-4" style={{ borderStyle: 'dashed' }}>
                 + Add Slide
               </button>
             </div>
@@ -516,19 +565,68 @@ interface SlideCardProps {
 
 function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, onRemove, onPromptChange, onRegenerate }: SlideCardProps) {
   const [editing, setEditing] = useState(false)
+  const titleRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const photoRef = useRef<HTMLInputElement>(null)
   const { accent, bg } = getSlideTheme(atmosphere, slide.type)
 
-  return (
-    <div className="fade-in rounded-xl overflow-hidden" style={{ border: `1px solid ${accent}30` }}>
-      {/* ── Visual Slide Preview ── */}
-      <div
-        className="relative cursor-pointer group"
-        style={{ minHeight: 220, background: bg }}
-        onClick={() => setEditing(e => !e)}
-      >
-        <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl" style={{ background: accent }} />
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: slide.id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  }
 
-        <span className="absolute top-4 left-5 text-xs font-bold z-10" style={{ color: 'rgba(255,255,255,0.3)' }}>{index + 1}</span>
+  // Keep contentEditable in sync with external slide updates
+  useEffect(() => {
+    if (titleRef.current && titleRef.current.innerText !== slide.title) {
+      titleRef.current.innerText = slide.title
+    }
+  }, [slide.title])
+
+  useEffect(() => {
+    if (contentRef.current && contentRef.current.innerText !== slide.content) {
+      contentRef.current.innerText = slide.content
+    }
+  }, [slide.content])
+
+  function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      if (ev.target?.result) onUpdate('image_url', ev.target.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const bgStyle = slide.image_url
+    ? `url(${slide.image_url}) center/cover no-repeat`
+    : bg
+
+  return (
+    <div ref={setNodeRef} {...attributes} style={{ ...style, border: `1px solid ${editing ? accent + '60' : accent + '30'}`, borderRadius: 12, overflow: 'hidden' }}>
+
+      {/* ── Visual Slide (WYSIWYG) ── */}
+      <div className="relative group" style={{ minHeight: 220, background: bgStyle }}>
+        {slide.image_url && (
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg,rgba(0,0,0,0.55),rgba(0,0,0,0.35))' }} />
+        )}
+        {!slide.image_url && (
+          <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: accent }} />
+        )}
+
+        {/* Drag handle */}
+        <div
+          {...listeners}
+          className="absolute top-3 left-3 z-20 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity select-none"
+          style={{ color: 'rgba(255,255,255,0.4)', fontSize: 16, lineHeight: 1, padding: '4px 6px' }}
+        >
+          ⠿
+        </div>
+
+        <span className="absolute top-4 left-10 text-xs font-bold z-10" style={{ color: 'rgba(255,255,255,0.3)' }}>{index + 1}</span>
 
         <span className="absolute top-4 right-12 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider z-10"
           style={{ background: `${accent}20`, color: accent, border: `1px solid ${accent}40` }}>
@@ -539,52 +637,107 @@ function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, o
           className="absolute top-4 right-4 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
           style={{ color: 'rgba(255,255,255,0.5)' }}>✕</button>
 
-        <div className="relative z-10 px-8 py-8 ml-2">
+        {/* WYSIWYG content area — click to edit inline */}
+        <div className="relative z-10 px-8 py-8 ml-2" onClick={() => setEditing(true)}>
           {slide.is_question && (
-            <p className="text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: accent }}>💬 Interaction Required</p>
+            <p className="text-xs font-semibold mb-2 uppercase tracking-wider select-none" style={{ color: accent }}>💬 Interaction Required</p>
           )}
-          <h3 className="font-black mb-3 leading-tight"
-            style={{ color: '#FFFFFF', fontSize: slide.title.length > 40 ? '1.1rem' : '1.5rem' }}>
-            {slide.title || <span style={{ color: '#3A4A6A' }}>Untitled slide</span>}
-          </h3>
-          <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.65)' }}>
-            {slide.content
-              ? slide.content.length > 160 ? slide.content.slice(0, 160) + '...' : slide.content
-              : <span style={{ color: '#3A4A6A' }}>No content yet</span>}
-          </p>
+          <div
+            ref={titleRef}
+            contentEditable={editing}
+            suppressContentEditableWarning
+            onBlur={e => onUpdate('title', e.currentTarget.innerText)}
+            className="font-black mb-3 leading-tight outline-none"
+            style={{
+              color: '#FFFFFF',
+              fontSize: slide.title.length > 40 ? '1.1rem' : '1.5rem',
+              cursor: editing ? 'text' : 'pointer',
+              borderBottom: editing ? `1px solid ${accent}50` : 'none',
+              paddingBottom: editing ? 2 : 0,
+              minHeight: '1.5em',
+              textShadow: slide.image_url ? '0 2px 8px rgba(0,0,0,0.8)' : 'none',
+            }}
+          >
+            {!editing && !slide.title && <span style={{ color: '#3A4A6A', fontWeight: 400, fontSize: '1rem' }}>Untitled — click to edit</span>}
+          </div>
+          <div
+            ref={contentRef}
+            contentEditable={editing}
+            suppressContentEditableWarning
+            onBlur={e => onUpdate('content', e.currentTarget.innerText)}
+            className="text-sm leading-relaxed outline-none"
+            style={{
+              color: editing ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.65)',
+              cursor: editing ? 'text' : 'pointer',
+              borderBottom: editing ? `1px solid ${accent}30` : 'none',
+              paddingBottom: editing ? 2 : 0,
+              minHeight: '2em',
+              textShadow: slide.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
+            }}
+          >
+            {!editing && !slide.content && <span style={{ color: '#3A4A6A' }}>No content yet</span>}
+          </div>
         </div>
 
-        <div className="absolute bottom-3 right-4 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
-          style={{ color: 'rgba(255,255,255,0.4)' }}>
-          {editing ? 'Collapse ↑' : 'Edit ↓'}
-        </div>
+        {/* Bottom toolbar — visible in editing mode */}
+        {editing && (
+          <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center gap-2 px-4 py-2" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
+            <button onClick={() => setEditing(false)} className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Done ✓</button>
+          </div>
+        )}
+
+        {!editing && (
+          <div className="absolute bottom-3 right-4 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
+            style={{ color: 'rgba(255,255,255,0.4)' }}>
+            Click to edit
+          </div>
+        )}
       </div>
 
-      {/* ── Edit Panel ── */}
-      {editing && (
-        <div className="p-4 space-y-3 fade-in" style={{ background: '#0D1220', borderTop: `1px solid ${accent}25` }}>
-          <div className="flex items-center gap-3">
-            <select value={slide.type} onChange={e => onUpdate('type', e.target.value)}
-              className="text-xs px-3 py-1.5 rounded-full font-semibold"
-              style={{ background: '#0A0E1A', color: accent, border: `1px solid ${accent}` }}>
-              {['intro', 'slide', 'question', 'reflection', 'closing'].map(t => <option key={t}>{t}</option>)}
-            </select>
-            <label className="flex items-center gap-1.5 text-xs cursor-pointer ml-auto" style={{ color: '#6B7A99' }}>
-              <input type="checkbox" checked={slide.is_question} onChange={e => onUpdate('is_question', e.target.checked)} />
-              Requires Response
-            </label>
-          </div>
-          <input className="input-field text-sm font-semibold" value={slide.title} onChange={e => onUpdate('title', e.target.value)} placeholder="Slide title" />
-          <textarea className="input-field text-sm" rows={4} value={slide.content} onChange={e => onUpdate('content', e.target.value)} placeholder="Slide content" />
-          <div className="flex gap-2">
-            <input className="input-field text-xs flex-1" placeholder="Tell AI how to improve this slide..."
-              value={prompt} onChange={e => onPromptChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && onRegenerate()} />
-            <button onClick={onRegenerate} disabled={regenerating} className="btn-ghost text-xs px-3 flex-shrink-0">
-              {regenerating ? <Spinner /> : '↺ Regenerate'}
+      {/* ── Controls Panel (always visible, compact) ── */}
+      <div className="flex items-center gap-2 px-4 py-2 flex-wrap" style={{ background: '#0D1220', borderTop: `1px solid ${accent}20` }}>
+        <select value={slide.type} onChange={e => onUpdate('type', e.target.value)}
+          className="text-xs px-2 py-1 rounded-full font-semibold"
+          style={{ background: '#0A0E1A', color: accent, border: `1px solid ${accent}50` }}>
+          {['intro', 'slide', 'question', 'reflection', 'closing'].map(t => <option key={t}>{t}</option>)}
+        </select>
+        <label className="flex items-center gap-1 text-xs cursor-pointer" style={{ color: '#6B7A99' }}>
+          <input type="checkbox" checked={slide.is_question} onChange={e => onUpdate('is_question', e.target.checked)} />
+          💬 Response
+        </label>
+
+        <div className="flex gap-1.5 ml-auto items-center">
+          {/* Photo upload */}
+          <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+          <button
+            onClick={() => photoRef.current?.click()}
+            className="text-xs px-2.5 py-1 rounded-full"
+            style={{ background: '#1E2A3A', color: '#6B7A99', border: '1px solid #2A3A4A' }}
+          >
+            📷 {slide.image_url ? 'Change' : 'Photo'}
+          </button>
+          {slide.image_url && (
+            <button onClick={() => onUpdate('image_url', '')} className="text-xs px-2 py-1 rounded-full"
+              style={{ color: '#6B7A99', background: '#1E2A3A', border: '1px solid #2A3A4A' }}>
+              ✕ Photo
             </button>
-          </div>
+          )}
+
+          {/* AI regenerate */}
+          <input
+            className="text-xs px-2 py-1 rounded-full"
+            style={{ background: '#0A0E1A', color: '#6B7A99', border: '1px solid #2A3A4A', width: 160 }}
+            placeholder="Prompt AI to rewrite..."
+            value={prompt}
+            onChange={e => onPromptChange(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && onRegenerate()}
+          />
+          <button onClick={onRegenerate} disabled={regenerating} className="text-xs px-2.5 py-1 rounded-full"
+            style={{ background: accent + '20', color: accent, border: `1px solid ${accent}50` }}>
+            {regenerating ? <Spinner /> : '↺'}
+          </button>
         </div>
-      )}
+      </div>
     </div>
   )
 }
