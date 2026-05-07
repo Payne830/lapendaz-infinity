@@ -4,12 +4,6 @@ import { useState, useEffect, use, useRef } from 'react'
 
 interface Step { id: string; title: string; content: string; type: string; is_question: number; image_url: string }
 
-const ROLES = [
-  'Chief Innovation Officer', 'Chief Growth Officer', 'Chief Development Officer',
-  'Chief Technology Officer', 'Chief Financial Officer', 'Chief Visual Officer',
-  'Chief Executive Officer', 'Guest',
-]
-
 export default function JoinPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const [phase, setPhase] = useState<'join' | 'waiting' | 'live' | 'ended'>('join')
@@ -26,7 +20,8 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
   const [error, setError] = useState('')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
-  const isPressingRef = useRef(false)
+  const isListeningRef = useRef(false)
+  const accumulatedRef = useRef('')
   const fileRef = useRef<HTMLInputElement>(null)
 
   const currentStep = steps[currentIndex]
@@ -42,7 +37,6 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
     setCurrentIndex(data.session.current_step)
     setLiveMode(data.session.live_mode)
     setPhase(data.session.status === 'live' ? 'live' : 'waiting')
-    // Register participant on join so host sees them online
     await fetch(`/api/sessions/${id}/join`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ participant_name: name, participant_role: role }),
@@ -52,7 +46,6 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
   useEffect(() => {
     if (phase !== 'live' && phase !== 'waiting') return
 
-    // SSE for real-time events
     const es = new EventSource(`/api/events/${id}`)
     es.onmessage = (e) => {
       const data = JSON.parse(e.data)
@@ -62,16 +55,17 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
         setSubmitted(false)
         setLiveMode('slide')
         setPhase('live')
+        accumulatedRef.current = ''
       }
       if (data.type === 'mode_changed') {
         setLiveMode(data.mode)
         setSubmitted(false)
         setText('')
+        accumulatedRef.current = ''
       }
       if (data.type === 'session_ended') setPhase('ended')
     }
 
-    // Polling fallback — syncs state every 3s in case SSE drops through tunnel
     const poll = setInterval(async () => {
       try {
         const res = await fetch(`/api/sessions/${id}`)
@@ -97,6 +91,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
       body: JSON.stringify({ participant_name: name, participant_role: role, type: 'text', content: text }),
     })
     setText('')
+    accumulatedRef.current = ''
     setSubmitted(true)
     setSubmitting(false)
   }
@@ -114,52 +109,96 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
     reader.readAsDataURL(file)
   }
 
-  function toggleVoice() {
+  function stopVoice() {
+    isListeningRef.current = false
+    setIsListening(false)
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch { /* ignore */ }
+      recognitionRef.current = null
+    }
+  }
+
+  function startVoiceInstance() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any
-    const SR = w.webkitSpeechRecognition || w.SpeechRecognition
-    if (!SR) { setError('请用 Chrome 浏览器开启语音功能'); return }
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition
+    if (!SR) return
 
-    if (isListening) {
-      isPressingRef.current = false
-      recognitionRef.current?.stop()
-      recognitionRef.current = null
-      setIsListening(false)
-      return
-    }
-
-    isPressingRef.current = true
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rec = new SR()
     rec.lang = 'zh-CN'
-    rec.continuous = true
+    rec.continuous = false   // false is more reliable on mobile Chrome
     rec.interimResults = true
+    rec.maxAlternatives = 1
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onresult = (e: any) => {
-      const t = Array.from(e.results as unknown[])
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .map((r: any) => r[0].transcript).join('')
-      setText(t)
+      let interimText = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const transcript = e.results[i][0].transcript
+        if (e.results[i].isFinal) {
+          accumulatedRef.current += transcript
+        } else {
+          interimText += transcript
+        }
+      }
+      setText(accumulatedRef.current + interimText)
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onerror = (e: any) => {
       if (e.error === 'not-allowed') {
         setError('请在浏览器设置里允许麦克风权限')
-        setIsListening(false)
-        isPressingRef.current = false
+        stopVoice()
+      } else if (e.error === 'audio-capture') {
+        setError('无法访问麦克风，请检查设备')
+        stopVoice()
+      } else if (e.error === 'network') {
+        setError('网络错误，请检查连接后重试')
+        stopVoice()
+      } else if (e.error === 'no-speech') {
+        // no speech detected — onend will restart if still listening
+      } else {
+        setError(`录音错误: ${e.error}`)
+        stopVoice()
       }
     }
+
     rec.onend = () => {
-      if (isPressingRef.current) {
-        try { rec.start() } catch { /* restart failed, stop */ }
+      recognitionRef.current = null
+      if (isListeningRef.current) {
+        // Still supposed to be listening — create a fresh instance
+        try { startVoiceInstance() } catch { stopVoice() }
       } else {
         setIsListening(false)
       }
     }
+
     recognitionRef.current = rec
+    rec.start()
+  }
+
+  function toggleVoice() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition
+    if (!SR) { setError('语音功能需要 Chrome 浏览器'); return }
+
+    if (isListeningRef.current) {
+      stopVoice()
+      return
+    }
+
+    setError('')
+    isListeningRef.current = true
+    setIsListening(true)
+    accumulatedRef.current = text  // keep any text already typed
+
     try {
-      rec.start()
-      setIsListening(true)
+      startVoiceInstance()
     } catch {
       setError('语音启动失败，请重试')
+      stopVoice()
     }
   }
 
@@ -235,7 +274,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
         {currentStep && (
           <>
-            {/* Slide content — always visible */}
+            {/* Slide content */}
             <div className="fade-in rounded-xl overflow-hidden" style={{ border: '1px solid #2A3A4A', position: 'relative', minHeight: 180,
               background: currentStep.image_url ? `url(${currentStep.image_url}) center/cover no-repeat` : '#111827' }}>
               {currentStep.image_url && <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg,rgba(0,0,0,0.7),rgba(0,0,0,0.45))' }} />}
@@ -246,7 +285,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
               </div>
             </div>
 
-            {/* Question input — only in question mode */}
+            {/* Question input */}
             {liveMode === 'question' && currentStep.is_question === 1 && (
               <div className="card fade-in space-y-3">
                 <p className="text-sm font-semibold" style={{ color: '#C9A84C' }}>
@@ -268,19 +307,40 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
                       rows={4}
                       placeholder="Type your thoughts here..."
                       value={text}
-                      onChange={e => setText(e.target.value)}
+                      onChange={e => {
+                        setText(e.target.value)
+                        accumulatedRef.current = e.target.value
+                      }}
                     />
 
+                    {/* Waveform animation when listening */}
+                    {isListening && (
+                      <div className="flex items-center gap-1 px-1" style={{ height: 24 }}>
+                        <span className="text-xs" style={{ color: '#E8C97A' }}>录音中</span>
+                        {[0, 1, 2, 3, 4].map(i => (
+                          <div key={i} style={{
+                            width: 3, borderRadius: 2,
+                            background: '#C9A84C',
+                            animation: `voice-bar 0.8s ${i * 0.12}s ease-in-out infinite alternate`,
+                            height: 8,
+                          }} />
+                        ))}
+                      </div>
+                    )}
+
+                    {error && <p className="text-xs text-red-400">{error}</p>}
+
                     <div className="flex gap-2">
-                      {/* Voice — tap to start/stop */}
+                      {/* Voice button */}
                       <button onClick={toggleVoice}
                         className="px-3 py-2 rounded-lg text-sm font-semibold transition-all flex-shrink-0"
                         style={{
                           background: isListening ? 'rgba(201,168,76,0.25)' : '#1E2A3A',
                           color: isListening ? '#E8C97A' : '#6B7A99',
                           border: `1px solid ${isListening ? '#C9A84C' : '#2A3A4A'}`,
+                          minWidth: 72,
                         }}>
-                        {isListening ? '🔴 停止' : '🎙 录音'}
+                        {isListening ? '⏹ 停止' : '🎙 录音'}
                       </button>
 
                       {/* Image upload */}
@@ -304,7 +364,6 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
               </div>
             )}
 
-            {/* Slide mode indicator when question step is in slide mode */}
             {liveMode === 'slide' && currentStep.is_question === 1 && (
               <div className="text-center py-3">
                 <p className="text-xs" style={{ color: '#3A4A6A' }}>Listening to the host...</p>
@@ -313,6 +372,14 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
           </>
         )}
       </div>
+
+      {/* Waveform keyframes */}
+      <style>{`
+        @keyframes voice-bar {
+          from { height: 4px; }
+          to { height: 20px; }
+        }
+      `}</style>
 
       {/* Footer */}
       <div className="px-4 py-2 flex-shrink-0 text-center" style={{ borderTop: '1px solid #1E2A3A' }}>
