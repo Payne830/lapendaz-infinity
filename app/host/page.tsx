@@ -48,7 +48,25 @@ const ATTRIBUTION_OPTIONS = [
 ]
 const STEP_LABELS = ['Context', 'Build Slides']
 const DRAFT_KEY = 'lapendaz_draft_ctx'
+const DRAFT_SLIDES_KEY = 'lapendaz_draft_slides'
 const SESSIONS_KEY = 'lapendaz_saved_sessions'
+
+interface SlidesDraft {
+  ctx: Context
+  slides: Slide[]
+  slidePrompts: string[]
+  savedAt: number
+}
+
+function formatRelativeTime(ts: number): string {
+  const diff = Date.now() - ts
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
 
 const DEFAULT_CTX: Context = {
   title: '', objective: '', participants: '', outcome: '', duration: '',
@@ -61,6 +79,8 @@ export default function HostPage() {
   const [ctx, setCtx] = useState<Context>(DEFAULT_CTX)
   const [draftSaved, setDraftSaved] = useState(false)
   const [savedSessions, setSavedSessions] = useState<SavedSession[]>([])
+  const [slidesDraft, setSlidesDraft] = useState<SlidesDraft | null>(null)
+  const slidesAutoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [slides, setSlides] = useState<Slide[]>([])
   const [generatingSlides, setGeneratingSlides] = useState(false)
@@ -116,15 +136,32 @@ export default function HostPage() {
     setAiDialogInput('')
   }
 
-  // Load draft and saved sessions on mount
+  // Load draft, slides draft, and saved sessions on mount
   useEffect(() => {
     try {
       const draft = localStorage.getItem(DRAFT_KEY)
       if (draft) setCtx(JSON.parse(draft))
       const sessions = localStorage.getItem(SESSIONS_KEY)
       if (sessions) setSavedSessions(JSON.parse(sessions))
+      const sd = localStorage.getItem(DRAFT_SLIDES_KEY)
+      if (sd) setSlidesDraft(JSON.parse(sd))
     } catch { /* ignore */ }
   }, [])
+
+  // Auto-save slides whenever they change (debounced 1.5s)
+  useEffect(() => {
+    if (slides.length === 0) return
+    if (slidesAutoSaveRef.current) clearTimeout(slidesAutoSaveRef.current)
+    slidesAutoSaveRef.current = setTimeout(() => {
+      try {
+        const draft: SlidesDraft = { ctx, slides, slidePrompts, savedAt: Date.now() }
+        localStorage.setItem(DRAFT_SLIDES_KEY, JSON.stringify(draft))
+        setSlidesDraft(draft)
+      } catch { /* ignore */ }
+    }, 1500)
+    return () => { if (slidesAutoSaveRef.current) clearTimeout(slidesAutoSaveRef.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slides, slidePrompts])
 
   // Auto-save draft whenever ctx changes
   useEffect(() => {
@@ -146,6 +183,28 @@ export default function HostPage() {
     localStorage.removeItem(DRAFT_KEY)
   }
 
+  function restoreSlidesDraft() {
+    if (!slidesDraft) return
+    setCtx(slidesDraft.ctx)
+    setSlides(slidesDraft.slides)
+    setSlidePrompts(slidesDraft.slidePrompts)
+    setStep(2)
+  }
+
+  function discardSlidesDraft() {
+    localStorage.removeItem(DRAFT_SLIDES_KEY)
+    setSlidesDraft(null)
+  }
+
+  function saveAndExit() {
+    try {
+      const draft: SlidesDraft = { ctx, slides, slidePrompts, savedAt: Date.now() }
+      localStorage.setItem(DRAFT_SLIDES_KEY, JSON.stringify(draft))
+      setSlidesDraft(draft)
+    } catch { /* ignore */ }
+    setStep(1)
+  }
+
   function step1Valid() {
     return ctx.title && ctx.objective && ctx.participants && ctx.outcome && ctx.duration && ctx.atmosphere && ctx.session_type && ctx.attribution
   }
@@ -153,21 +212,36 @@ export default function HostPage() {
   async function generateSlides() {
     setGeneratingSlides(true)
     setError('')
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 60000)
     try {
       const res = await fetch('/api/ai/generate-slides', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ context: ctx }),
+        signal: controller.signal,
       })
+      clearTimeout(timeout)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      // Assign stable IDs for drag-and-drop
       const withIds = data.slides.map((s: Omit<Slide, 'id'>, i: number) => ({ ...s, id: `slide-${Date.now()}-${i}` }))
+      const emptyPrompts = withIds.map(() => '')
+      // Save slides immediately so a disconnect can't erase them
+      try {
+        const draft: SlidesDraft = { ctx, slides: withIds, slidePrompts: emptyPrompts, savedAt: Date.now() }
+        localStorage.setItem(DRAFT_SLIDES_KEY, JSON.stringify(draft))
+        setSlidesDraft(draft)
+      } catch { /* ignore */ }
       setSlides(withIds)
-      setSlidePrompts(withIds.map(() => ''))
+      setSlidePrompts(emptyPrompts)
       setStep(2)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to generate slides')
+      clearTimeout(timeout)
+      if (e instanceof Error && e.name === 'AbortError') {
+        setError('Generation timed out — please try again.')
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to generate slides')
+      }
     }
     setGeneratingSlides(false)
   }
@@ -249,6 +323,8 @@ export default function HostPage() {
         const existing: SavedSession[] = JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]')
         const updated = [{ id: data.id, title: ctx.title, savedAt: Date.now() }, ...existing].slice(0, 10)
         localStorage.setItem(SESSIONS_KEY, JSON.stringify(updated))
+        localStorage.removeItem(DRAFT_SLIDES_KEY)
+        setSlidesDraft(null)
       } catch { /* ignore */ }
 
       router.push(`/host/session/${data.id}`)
@@ -308,6 +384,31 @@ export default function HostPage() {
           {/* ── STEP 1: CONTEXT ── */}
           {step === 1 && (
             <div className="fade-in space-y-6">
+
+              {/* Slides Draft Recovery Banner */}
+              {slidesDraft && (
+                <div className="card fade-in" style={{ borderColor: '#C9A84C60', background: 'rgba(201,168,76,0.06)' }}>
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl flex-shrink-0">📂</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold" style={{ color: '#F0F4FF' }}>
+                        Draft found: &ldquo;{slidesDraft.ctx.title || 'Untitled session'}&rdquo;
+                      </p>
+                      <p className="text-xs mt-0.5" style={{ color: '#6B7A99' }}>
+                        {slidesDraft.slides.length} slides · Saved {formatRelativeTime(slidesDraft.savedAt)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <button onClick={restoreSlidesDraft} className="btn-gold text-sm flex-1 text-center">
+                      Continue Building →
+                    </button>
+                    <button onClick={discardSlidesDraft} className="text-xs px-3 py-2 rounded-lg" style={{ color: '#6B7A99', background: '#1E2A3A' }}>
+                      Discard
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Recent Sessions */}
               {savedSessions.length > 0 && (
@@ -521,9 +622,14 @@ export default function HostPage() {
                   <h2 className="text-2xl font-black" style={{ color: '#F0F4FF' }}>Build Slides</h2>
                   <p className="text-sm mt-1" style={{ color: '#6B7A99' }}>AI generated {slides.length} slides. Click any slide to edit.</p>
                 </div>
-                <button onClick={createAndLaunch} disabled={launching} className="btn-gold px-6 text-sm">
-                  {launching ? <span className="flex items-center gap-2"><Spinner /> Creating session...</span> : '🚀 Launch Session →'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={saveAndExit} className="text-xs px-3 py-2 rounded-lg" style={{ color: '#6B7A99', background: '#1E2A3A', border: '1px solid #2A3A4A' }}>
+                    💾 Save & Exit
+                  </button>
+                  <button onClick={createAndLaunch} disabled={launching} className="btn-gold px-6 text-sm">
+                    {launching ? <span className="flex items-center gap-2"><Spinner /> Creating session...</span> : '🚀 Launch Session →'}
+                  </button>
+                </div>
               </div>
 
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
