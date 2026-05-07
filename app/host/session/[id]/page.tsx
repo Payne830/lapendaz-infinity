@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, use } from 'react'
+import { useState, useEffect, useCallback, use, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import QRCode from 'qrcode'
 import ReactMarkdown from 'react-markdown'
@@ -42,6 +42,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
   const [liveAnalysis, setLiveAnalysis] = useState('')
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [started, setStarted] = useState(false)
+  const reportRef = useRef<HTMLDivElement>(null)
 
   const currentStep = session ? steps[session.current_step] : null
   const currentMode = session?.live_mode ?? 'slide'
@@ -195,6 +196,40 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
     setLoadingAnalysis(false)
   }
 
+  function downloadPdf() {
+    const content = reportRef.current?.innerHTML
+    if (!content) return
+    const win = window.open('', '_blank', 'width=900,height=700')
+    if (!win) return
+    win.document.write(`<!DOCTYPE html>
+<html><head>
+  <meta charset="utf-8">
+  <title>${session?.title ?? 'Report'}</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:'Segoe UI',Arial,sans-serif;color:#111;padding:48px;line-height:1.7;font-size:14px;max-width:820px;margin:0 auto}
+    h1{font-size:1.4rem;font-weight:900;margin:0 0 0.5rem}
+    h2{font-size:1rem;font-weight:700;margin:1.5rem 0 0.5rem;border-bottom:1px solid #ddd;padding-bottom:.25rem;color:#7a5a0a}
+    h3{font-size:.95rem;font-weight:700;margin:1rem 0 .25rem;color:#2a4a7a}
+    p{margin:.4rem 0}
+    ul,ol{padding-left:1.5rem;margin:.4rem 0}
+    li{margin:.2rem 0}
+    blockquote{border-left:3px solid #C9A84C;padding-left:.75rem;font-style:italic;margin:.5rem 0;color:#555}
+    strong{font-weight:700}em{color:#555}
+    hr{border:none;border-top:1px solid #ddd;margin:1rem 0}
+    table{width:100%;border-collapse:collapse;font-size:.85rem;margin:.5rem 0}
+    th{background:#f5f0e0;font-weight:700;padding:.4rem .6rem;text-align:left;border:1px solid #ccc}
+    td{padding:.35rem .6rem;border:1px solid #ccc}
+    code{background:#f4f4f4;padding:.1rem .3rem;border-radius:3px;font-size:.8rem;font-family:monospace}
+    @media print{body{padding:20px}}
+  </style>
+</head>
+<body>${content}</body></html>`)
+    win.document.close()
+    win.focus()
+    setTimeout(() => { win.print(); win.close() }, 400)
+  }
+
   if (notFound) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="card text-center" style={{ maxWidth: 400 }}>
@@ -230,7 +265,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
 
       <div className="flex flex-1 overflow-hidden">
         {/* ── MAIN CONTENT ── */}
-        <div className="flex-1 flex flex-col p-6 gap-4 overflow-y-auto">
+        <div className={`flex-1 flex flex-col p-6 gap-4 ${started && session.status === 'live' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
 
           {/* PRE-SESSION */}
           {!started ? (
@@ -313,19 +348,12 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
                 </div>
                 {summary ? (
                   <>
-                    <div className="rounded-xl p-4 overflow-y-auto report-body" style={{ background: '#0A0E1A', maxHeight: 440 }}>
+                    <div ref={reportRef} className="rounded-xl p-4 overflow-y-auto report-body" style={{ background: '#0A0E1A', maxHeight: 440 }}>
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary}</ReactMarkdown>
                     </div>
-                    <button
-                      onClick={() => {
-                        const blob = new Blob([summary], { type: 'text/markdown' })
-                        const a = document.createElement('a')
-                        a.href = URL.createObjectURL(blob)
-                        a.download = `${session.title}-report.md`
-                        a.click()
-                      }}
-                      className="btn-ghost text-sm mt-3"
-                    >⬇ Download Report (.md)</button>
+                    <button onClick={downloadPdf} className="btn-ghost text-sm mt-3">
+                      ⬇ Download Report (PDF)
+                    </button>
                   </>
                 ) : (
                   <p className="text-sm" style={{ color: '#6B7A99' }}>Click Generate Report to create an AI analysis and minutes.</p>
@@ -336,7 +364,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
           ) : (
             /* LIVE SESSION */
             currentStep && (
-              <div className="fade-in flex flex-col gap-4">
+              <div className="fade-in flex flex-col gap-4 flex-1 min-h-0">
                 {/* Progress bar */}
                 <div className="flex gap-1">
                   {steps.map((_, i) => (
@@ -346,8 +374,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
                 </div>
 
                 {/* Current slide */}
-                <div className="rounded-2xl overflow-hidden flex-1" style={{
-                  minHeight: 340,
+                <div className="rounded-2xl overflow-hidden flex-1 min-h-0" style={{
                   border: '1px solid #2A3A4A',
                   position: 'relative',
                   background: getSessionSlideBg(currentStep.type),

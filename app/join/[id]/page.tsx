@@ -25,6 +25,41 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
   const [waveformBars, setWaveformBars] = useState([0, 0, 0, 0, 0])
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const reportRef = useRef<HTMLDivElement>(null)
+
+  function downloadPdf() {
+    const content = reportRef.current?.innerHTML
+    if (!content) return
+    const win = window.open('', '_blank', 'width=900,height=700')
+    if (!win) return
+    win.document.write(`<!DOCTYPE html>
+<html><head>
+  <meta charset="utf-8">
+  <title>${sessionTitle ?? 'Report'}</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:'Segoe UI',Arial,sans-serif;color:#111;padding:48px;line-height:1.7;font-size:14px;max-width:820px;margin:0 auto}
+    h1{font-size:1.4rem;font-weight:900;margin:0 0 0.5rem}
+    h2{font-size:1rem;font-weight:700;margin:1.5rem 0 0.5rem;border-bottom:1px solid #ddd;padding-bottom:.25rem;color:#7a5a0a}
+    h3{font-size:.95rem;font-weight:700;margin:1rem 0 .25rem;color:#2a4a7a}
+    p{margin:.4rem 0}
+    ul,ol{padding-left:1.5rem;margin:.4rem 0}
+    li{margin:.2rem 0}
+    blockquote{border-left:3px solid #C9A84C;padding-left:.75rem;font-style:italic;margin:.5rem 0;color:#555}
+    strong{font-weight:700}em{color:#555}
+    hr{border:none;border-top:1px solid #ddd;margin:1rem 0}
+    table{width:100%;border-collapse:collapse;font-size:.85rem;margin:.5rem 0}
+    th{background:#f5f0e0;font-weight:700;padding:.4rem .6rem;text-align:left;border:1px solid #ccc}
+    td{padding:.35rem .6rem;border:1px solid #ccc}
+    code{background:#f4f4f4;padding:.1rem .3rem;border-radius:3px;font-size:.8rem;font-family:monospace}
+    @media print{body{padding:20px}}
+  </style>
+</head>
+<body>${content}</body></html>`)
+    win.document.close()
+    win.focus()
+    setTimeout(() => { win.print(); win.close() }, 400)
+  }
   const audioCtxRef = useRef<AudioContext | null>(null)
   const animFrameRef = useRef<number>(0)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -288,21 +323,12 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
             <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#C9A84C' }}>
               {sessionTitle} — Session Report
             </p>
-            <div className="rounded-xl p-4 report-body overflow-y-auto"
+            <div ref={reportRef} className="rounded-xl p-4 report-body overflow-y-auto"
               style={{ background: '#111827', border: '1px solid #2A3A4A', maxHeight: '60vh' }}>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{sessionSummary}</ReactMarkdown>
             </div>
-            <button
-              onClick={() => {
-                const blob = new Blob([sessionSummary], { type: 'text/markdown' })
-                const a = document.createElement('a')
-                a.href = URL.createObjectURL(blob)
-                a.download = `${sessionTitle || 'session'}-report.md`
-                a.click()
-              }}
-              className="btn-gold w-full text-center text-sm"
-            >
-              ⬇ Download Report
+            <button onClick={downloadPdf} className="btn-gold w-full text-center text-sm">
+              ⬇ Download Report (PDF)
             </button>
           </div>
         ) : (
@@ -342,7 +368,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
           <>
             {/* Slide card */}
             <div className="fade-in rounded-xl overflow-hidden" style={{
-              border: '1px solid #2A3A4A', position: 'relative', minHeight: 180,
+              border: '1px solid #2A3A4A', position: 'relative', minHeight: 260,
               background: currentStep.image_url
                 ? `url(${currentStep.image_url}) center/cover no-repeat`
                 : '#111827',
