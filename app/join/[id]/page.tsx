@@ -403,6 +403,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
                 <p className="text-sm leading-relaxed" style={{
                   color: currentStep.image_url ? 'rgba(255,255,255,0.88)' : '#B0BDD0',
                   textShadow: currentStep.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
+                  whiteSpace: 'pre-wrap',
                 }}>{currentStep.content}</p>
               </div>
             </div>

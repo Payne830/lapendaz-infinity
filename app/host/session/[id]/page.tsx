@@ -383,7 +383,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
                     <h2 className="font-black mb-4 leading-tight" style={{ color: '#FFFFFF', fontSize: currentStep.title.length > 50 ? '1.6rem' : '2.2rem' }}>
                       {currentStep.title}
                     </h2>
-                    <p className="leading-relaxed" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '1.05rem', maxWidth: '80%' }}>
+                    <p className="leading-relaxed" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '1.05rem', maxWidth: '80%', whiteSpace: 'pre-wrap' }}>
                       {currentStep.content}
                     </p>
                   </div>
