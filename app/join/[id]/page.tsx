@@ -41,6 +41,11 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
     setCurrentIndex(data.session.current_step)
     setLiveMode(data.session.live_mode)
     setPhase(data.session.status === 'live' ? 'live' : 'waiting')
+    // Register participant on join so host sees them online
+    await fetch(`/api/sessions/${id}/join`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ participant_name: name, participant_role: role }),
+    })
   }
 
   useEffect(() => {
@@ -78,7 +83,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
           setPhase('live')
         }
       } catch { /* ignore */ }
-    }, 3000)
+    }, 1000)
 
     return () => { es.close(); clearInterval(poll) }
   }, [id, phase])

@@ -105,6 +105,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
       if (data.type === 'step_changed') setSession(prev => prev ? { ...prev, current_step: data.step } : prev)
       if (data.type === 'mode_changed') setSession(prev => prev ? { ...prev, live_mode: data.mode } : prev)
       if (data.type === 'session_ended') setSession(prev => prev ? { ...prev, status: 'ended' } : prev)
+      if (data.type === 'participant_joined') setParticipants(prev => prev.some(p => p.name === data.name) ? prev : [...prev, { id: data.name, name: data.name, role: data.role }])
     }
     return () => es.close()
   }, [id, started])
