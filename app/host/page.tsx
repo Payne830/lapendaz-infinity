@@ -15,6 +15,7 @@ type WizardStep = 1 | 2
 
 interface Context {
   title: string
+  host_name: string
   objective: string
   participants: string
   outcome: string
@@ -72,7 +73,7 @@ function formatRelativeTime(ts: number): string {
 }
 
 const DEFAULT_CTX: Context = {
-  title: '', objective: '', participants: '', outcome: '', duration: '',
+  title: '', host_name: '', objective: '', participants: '', outcome: '', duration: '',
   atmosphere: 'Inspirational', session_type: 'Meeting', attribution: 'named',
 }
 
@@ -508,6 +509,10 @@ export default function HostPage() {
               <div className="card space-y-5">
                 <Field label="Session Title" hint="Give your session a clear name">
                   <input className="input-field" placeholder="e.g. Officer AI Architecture Transformation" value={ctx.title} onChange={e => updateCtx('title', e.target.value)} />
+                </Field>
+
+                <Field label="Host Name" hint="Name of the person running this session — appears in the report">
+                  <input className="input-field" placeholder="e.g. Jason Yeap" value={ctx.host_name} onChange={e => updateCtx('host_name', e.target.value)} />
                 </Field>
 
                 <FieldWithAI
