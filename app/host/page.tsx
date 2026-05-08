@@ -825,11 +825,11 @@ function SlideCard({ index, slide, visual_theme, prompt, regenerating, onUpdate,
     <div ref={setNodeRef} {...attributes} style={{ ...style, border: `1px solid ${editing ? accent + '60' : accent + '30'}`, borderRadius: 12, overflow: 'hidden' }}>
 
       {/* ── Visual Slide (WYSIWYG) ── */}
-      <div className="relative group" style={{ minHeight: isImageSlide ? undefined : 220, background: bgStyle }}>
+      <div className="relative group" style={{ minHeight: 220, background: bgStyle }}>
 
         {/* Image type: clean photo via <img> — no overlay, no text */}
         {isImageSlide && slide.image_url && (
-          <img src={slide.image_url} alt="" style={{ width: '100%', display: 'block', objectFit: 'cover' }} />
+          <img src={slide.image_url} alt="" style={{ width: '100%', height: 220, display: 'block', objectFit: 'cover' }} />
         )}
         {isImageSlide && !slide.image_url && (
           <div style={{ minHeight: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
