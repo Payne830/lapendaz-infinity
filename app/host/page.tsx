@@ -37,6 +37,9 @@ interface SavedSession {
   id: string
   title: string
   savedAt: number
+  ctx?: Context
+  slides?: Slide[]
+  slidePrompts?: string[]
 }
 
 const ATMOSPHERE_OPTIONS = ['Professional', 'Casual & Warm', 'Energetic', 'Inspirational', 'Structured & Formal']
@@ -342,7 +345,7 @@ export default function HostPage() {
 
       try {
         const existing: SavedSession[] = JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]')
-        const updated = [{ id: data.id, title: ctx.title, savedAt: Date.now() }, ...existing].slice(0, 10)
+        const updated = [{ id: data.id, title: ctx.title, savedAt: Date.now(), ctx, slides, slidePrompts }, ...existing].slice(0, 10)
         localStorage.setItem(SESSIONS_KEY, JSON.stringify(updated))
         // Keep draft slides so they survive a server restart
       } catch { /* ignore */ }
@@ -358,6 +361,17 @@ export default function HostPage() {
     const updated = savedSessions.filter(s => s.id !== id)
     setSavedSessions(updated)
     localStorage.setItem(SESSIONS_KEY, JSON.stringify(updated))
+  }
+
+  function editSession(s: SavedSession) {
+    // Use stored slides if available; fall back to current draft for legacy entries
+    const restoredSlides = s.slides ?? slidesDraft?.slides ?? []
+    const restoredCtx = s.ctx ?? slidesDraft?.ctx ?? ctx
+    const restoredPrompts = s.slidePrompts ?? (restoredSlides.map(() => ''))
+    setCtx(restoredCtx)
+    setSlides(restoredSlides)
+    setSlidePrompts(restoredPrompts)
+    setStep(2)
   }
 
   return (
@@ -445,6 +459,15 @@ export default function HostPage() {
                             {new Date(s.savedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
+                        {(s.slides || slidesDraft) && (
+                          <button
+                            onClick={() => editSession(s)}
+                            className="text-xs px-3 py-1.5 rounded-lg font-semibold flex-shrink-0"
+                            style={{ background: '#1E2A3A', color: '#B0BDD0', border: '1px solid #2A3A4A' }}
+                          >
+                            ✏️ Edit
+                          </button>
+                        )}
                         <button
                           onClick={() => router.push(`/host/session/${s.id}`)}
                           className="text-xs px-3 py-1.5 rounded-lg font-semibold flex-shrink-0"
