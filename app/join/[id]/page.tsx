@@ -9,7 +9,7 @@ interface Step { id: string; title: string; content: string; type: string; is_qu
 
 export default function JoinPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const [phase, setPhase] = useState<'join' | 'waiting' | 'live' | 'ended'>('join')
+  const [phase, setPhase] = useState<'join' | 'waiting' | 'live' | 'ended' | 'closed'>('join')
   const [name, setName] = useState('')
   const role = 'Officer'
   const [sessionTitle, setSessionTitle] = useState('')
@@ -110,33 +110,31 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
     setError('')
   }
 
+  // SSE — keep open in live/waiting/ended so we catch report_ready + session_closed
   useEffect(() => {
-    if (phase !== 'live' && phase !== 'waiting') return
+    if (phase !== 'live' && phase !== 'waiting' && phase !== 'ended') return
     const es = new EventSource(`/api/events/${id}`)
     es.onmessage = (e) => {
       const data = JSON.parse(e.data)
-      if (data.type === 'step_changed') {
-        setCurrentIndex(data.step)
-        setLiveMode('slide')
-        setPhase('live')
-        resetResponseState()
-      }
-      if (data.type === 'mode_changed') {
-        setLiveMode(data.mode)
-        resetResponseState()
-      }
+      if (data.type === 'step_changed') { setCurrentIndex(data.step); setLiveMode('slide'); setPhase('live'); resetResponseState() }
+      if (data.type === 'mode_changed') { setLiveMode(data.mode); resetResponseState() }
       if (data.type === 'session_ended') setPhase('ended')
+      if (data.type === 'report_ready') setSessionSummary(data.summary)
+      if (data.type === 'session_closed') setPhase('closed')
     }
+    return () => es.close()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, phase])
+
+  // Poll for step/status changes while live/waiting
+  useEffect(() => {
+    if (phase !== 'live' && phase !== 'waiting') return
     const poll = setInterval(async () => {
       try {
         const res = await fetch(`/api/sessions/${id}`)
         if (!res.ok) return
         const data = await res.json()
-        if (data.session.status === 'ended') {
-          setSessionSummary(data.session.summary || '')
-          setPhase('ended')
-          return
-        }
+        if (data.session.status === 'ended') { setSessionSummary(data.session.summary || ''); setPhase('ended'); return }
         if (data.session.status === 'live') {
           setCurrentIndex(prev => prev !== data.session.current_step ? data.session.current_step : prev)
           setLiveMode(data.session.live_mode)
@@ -144,8 +142,22 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
         }
       } catch { /* ignore */ }
     }, 1000)
-    return () => { es.close(); clearInterval(poll) }
+    return () => clearInterval(poll)
   }, [id, phase])
+
+  // Poll for report in ended phase (fallback if SSE report_ready was missed)
+  useEffect(() => {
+    if (phase !== 'ended' || sessionSummary) return
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/sessions/${id}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.session.summary) setSessionSummary(data.session.summary)
+      } catch { /* ignore */ }
+    }, 3000)
+    return () => clearInterval(poll)
+  }, [id, phase, sessionSummary])
 
   async function submitText() {
     if (!text.trim()) return
@@ -353,6 +365,39 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
             </p>
           </div>
         )}
+      </div>
+    </div>
+  )
+
+  /* ── CLOSED (host ended + closed the session) ── */
+  if (phase === 'closed') return (
+    <div className="min-h-screen flex flex-col px-5 py-8" style={{ maxWidth: 520, margin: '0 auto' }}>
+      <div className="fade-in space-y-5">
+        {sessionSummary && (
+          <div className="space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#C9A84C' }}>
+              {sessionTitle} — Session Report
+            </p>
+            <div ref={reportRef} className="rounded-xl p-4 report-body overflow-y-auto"
+              style={{ background: '#111827', border: '1px solid #2A3A4A', maxHeight: '40vh' }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{sessionSummary}</ReactMarkdown>
+            </div>
+            <button onClick={downloadPdf} className="btn-ghost w-full text-center text-sm">
+              ⬇ Download Report (PDF)
+            </button>
+          </div>
+        )}
+        <div className="card text-center space-y-4 py-8" style={{ borderColor: 'rgba(201,168,76,0.35)', background: 'rgba(201,168,76,0.04)' }}>
+          <div className="text-4xl font-black" style={{ color: '#C9A84C' }}>∞</div>
+          <h2 className="text-xl font-black" style={{ color: '#F0F4FF' }}>Host your own session</h2>
+          <p className="text-sm leading-relaxed" style={{ color: '#B0BDD0' }}>
+            Run AI-powered meetings with live responses, real-time insights, and instant reports — just like this one.
+          </p>
+          <a href="/host" className="btn-gold block text-center text-sm">
+            🚀 Create Your Session →
+          </a>
+          <p className="text-xs" style={{ color: '#3A4A6A' }}>Lapendaz Infinity · Powered by AI</p>
+        </div>
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, getSteps, getResponses, saveSessionSummary } from '@/lib/db'
 import { generateSummary } from '@/lib/anthropic'
+import { emitEvent } from '@/lib/events'
 import { logger } from '@/lib/log'
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -29,6 +30,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   try {
     const summary = await generateSummary(session.title, session.goal, steps, enrichedResponses, sessionType, attribution)
     saveSessionSummary(id, summary)
+    emitEvent(id, { type: 'report_ready', summary })
     logger.info(`POST /api/sessions/${id}/summary`, 'Summary generated OK')
     return NextResponse.json({ summary })
   } catch (err) {

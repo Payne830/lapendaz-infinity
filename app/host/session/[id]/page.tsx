@@ -166,6 +166,14 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
     setLoadingSummary(false)
   }
 
+  async function closeSession() {
+    await fetch(`/api/sessions/${id}/advance`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction: 'close' }),
+    })
+    router.push('/host')
+  }
+
   async function analyseResponses() {
     if (!currentStep || currentResponses.length === 0) return
     setLoadingAnalysis(true)
@@ -347,6 +355,12 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
                 ) : (
                   <p className="text-sm" style={{ color: '#6B7A99' }}>Click Generate Report to create an AI analysis and minutes.</p>
                 )}
+                <div className="mt-4 pt-4" style={{ borderTop: '1px solid #2A3A4A' }}>
+                  <button onClick={closeSession} className="text-sm px-4 py-2 rounded-lg w-full" style={{ background: '#1E2A3A', color: '#6B7A99', border: '1px solid #2A3A4A' }}>
+                    ✕ Close Session — Return to Dashboard
+                  </button>
+                  <p className="text-xs mt-1.5 text-center" style={{ color: '#3A4A6A' }}>Participants will see a &ldquo;Create your own session&rdquo; page</p>
+                </div>
               </div>
             </div>
 

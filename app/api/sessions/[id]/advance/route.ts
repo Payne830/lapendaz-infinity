@@ -29,6 +29,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ status: 'ended' })
   }
 
+  if (direction === 'close') {
+    emitEvent(id, { type: 'session_closed' })
+    logger.info(`POST /api/sessions/${id}/advance`, 'Session closed by host')
+    return NextResponse.json({ status: 'closed' })
+  }
+
   advanceStep(id, nextStep)
   emitEvent(id, { type: 'step_changed', step: nextStep, stepData: steps[nextStep] })
   logger.info(`POST /api/sessions/${id}/advance`, `Moved to step ${nextStep}`)
