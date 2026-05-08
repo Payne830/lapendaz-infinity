@@ -80,83 +80,137 @@ function buildResponsesBlock(
 function buildPrompt(
   title: string,
   goal: string,
+  host: string,
   sessionType: SessionType,
   attribution: AttributionMode,
-  steps: Array<{ title: string; content: string; is_question: number }>,
-  responses: Array<{ participant_name: string; participant_role: string; step_title: string; content: string }>
+  steps: Array<{ title: string; content: string; type: string; is_question: number }>,
+  responses: Array<{ participant_name: string; participant_role: string; step_title: string; content: string }>,
+  participants: Array<{ name: string; role: string }>
 ): string {
   const date = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-  const participantCount = new Set(responses.map(r => r.participant_name)).size
   const questionSteps = steps.filter(s => s.is_question)
+  const contentSteps = steps.filter(s => s.type !== 'question' && s.type !== 'reflection')
 
-  // Build per-question response blocks for detailed templates
   const perQuestion = questionSteps.map(step => {
     const stepResponses = responses.filter(r => r.step_title === step.title)
     const lines = stepResponses.map(r =>
       `> "${r.content}" — ${formatAttribution(r, attribution)}`
     ).join('\n')
-    return `### ${step.title}\n${lines || '> No responses for this question.'}`
-  }).join('\n\n')
+    return `### ${step.title}\n${lines || '> *No responses collected.*'}\n\n**Synthesis:** [write 1–2 sentences on what emerged, or note if no responses]`
+  }).join('\n\n---\n\n')
 
   const responsesFlat = buildResponsesBlock(responses, attribution)
 
+  const attendanceLines = participants.length > 0
+    ? participants.map(p => `- ${p.name} (${p.role}) — Present`).join('\n')
+    : '- No participants recorded'
+
+  const contentSlidesBlock = contentSteps.map(s =>
+    `SLIDE "${s.title}":\n${s.content}`
+  ).join('\n\n')
+
   if (sessionType === 'Meeting') {
-    return `You are writing formal meeting minutes for Lapendaz.
+    return `You are writing formal, professional meeting minutes for Lapendaz.
 
-Session: "${title}"
-Date: ${date}
-Objective: "${goal}"
-Participants: ${participantCount}
+SESSION DETAILS:
+- Title: "${title}"
+- Date: ${date}
+- Host: ${host || 'N/A'}
+- Objective: "${goal}"
+- Participants who attended: ${participants.length}
 
-All responses collected during the session:
+ATTENDANCE LIST:
+${attendanceLines}
+
+CONTENT SLIDES (for Event Contents Summary — these are the slides presented, NOT questions):
+${contentSlidesBlock}
+
+DISCUSSION QUESTIONS WITH RESPONSES:
+${perQuestion || '[No question slides recorded.]'}
+
+ALL RESPONSES (flat):
 ${responsesFlat}
 
-Write the meeting minutes in this exact Markdown structure:
+Write the meeting minutes in this EXACT Markdown structure. Do not add or remove any sections.
 
 # ${title} — Meeting Minutes
-**Date:** ${date} | **Type:** Meeting | **Participants:** ${participantCount}
+**Date:** ${date} | **Type:** Meeting | **Host:** ${host || 'N/A'}
+
+---
+
+## Attendance
+${attendanceLines}
 
 ---
 
 ## Executive Summary
-[2–3 sentences: what was discussed, key direction reached]
+[2–3 sentences: what was presented, who attended, and what direction or outcome was reached]
 
-## Key Takeaways
-- [takeaway 1]
-- [takeaway 2]
-- [takeaway 3]
+---
+
+## Event Contents Summary
+*Key knowledge points covered in this session (questions and reflections excluded).*
+
+[Organise the CONTENT SLIDES into 4–6 logical thematic groups. For each group use this format:
+
+### [Group Theme Title]
+- [concise key point]
+- [concise key point]
+- [concise key point]
+
+Base the groups strictly on the CONTENT SLIDES provided above. Do NOT include question or reflection content here.]
+
+---
 
 ## Discussion Breakdown
 
-${perQuestion || '[No question slides were recorded.]'}
+${perQuestion || '### [No question slides were recorded in this session.]'}
 
-*(For each question above, add a **Synthesis:** line: 1–2 sentences on what emerged.)*
+---
+
+## Key Takeaways
+
+### Knowledge Covered
+[3–5 bullets: most important concepts from the content slides that participants should remember and apply]
+
+### Participant Outcomes
+[2–4 bullets: what participants committed to, identified, or walked away with — based on their responses. If no responses, note what the session intended for participants to achieve.]
+
+### Facilitator Observations
+[2–3 bullets: observations about group engagement, learning gaps, or recommendations for next session]
+
+---
 
 ## Decisions Made
-- [decision or alignment reached]
+[Bullet list of decisions or alignments reached. If none clearly stated, note what was implicitly agreed upon.]
+
+---
 
 ## Individual Commitments
 | Participant | Commitment Made |
 |-------------|----------------|
-[Fill one row per participant who expressed a clear commitment. Use ${attribution === 'named' ? 'full name' : attribution === 'role' ? 'role only' : 'anonymous'}.]
+[One row per participant who expressed a clear commitment. Use ${attribution === 'named' ? 'full name' : attribution === 'role' ? 'role only' : 'anonymous'}. If none recorded, write a single row with "—" and "No commitments recorded."]
+
+---
 
 ## Action Plan
-| # | Action | Suggested Owner | Timeline |
-|---|--------|-----------------|----------|
-| 1 | ... | ... | Next 7 days |
-| 2 | ... | ... | ... |
+| # | Action | Owner | Timeline |
+|---|--------|-------|----------|
+[Generate 3–5 specific, actionable items based on the session content and participant responses. Be concrete.]
 
 ---
 *Generated by Lapendaz Infinity*`
   }
 
   if (sessionType === 'Workshop') {
+    const pCount = participants.length
     return `You are writing a workshop summary for Lapendaz.
 
 Workshop: "${title}"
 Date: ${date}
+Host: ${host || 'N/A'}
 Objective: "${goal}"
-Participants: ${participantCount}
+Participants: ${pCount}
 
 Responses collected:
 ${responsesFlat}
@@ -164,7 +218,7 @@ ${responsesFlat}
 Write in this exact Markdown structure:
 
 # ${title} — Workshop Summary
-**Date:** ${date} | **Type:** Workshop | **Participants:** ${participantCount}
+**Date:** ${date} | **Type:** Workshop | **Host:** ${host || 'N/A'} | **Participants:** ${pCount}
 
 ---
 
@@ -196,12 +250,14 @@ ${perQuestion || '[No question slides were recorded.]'}
   }
 
   if (sessionType === 'Forum') {
+    const pCount = participants.length
     return `You are writing a public forum highlights report for Lapendaz.
 
 Forum: "${title}"
 Date: ${date}
+Host: ${host || 'N/A'}
 Topic: "${goal}"
-Audience size: ${participantCount}
+Audience size: ${pCount}
 
 Responses collected (all anonymous in this report):
 ${buildResponsesBlock(responses, 'anonymous')}
@@ -209,7 +265,7 @@ ${buildResponsesBlock(responses, 'anonymous')}
 Write in this exact Markdown structure:
 
 # ${title} — Forum Highlights
-**Date:** ${date} | **Type:** Forum | **Audience:** ${participantCount} participants
+**Date:** ${date} | **Type:** Forum | **Host:** ${host || 'N/A'} | **Audience:** ${pCount} participants
 
 ---
 
@@ -233,7 +289,7 @@ Write in this exact Markdown structure:
 [What the audience collectively expressed, believed, or called for — 3–5 bullets]
 
 ## Recommendations
-- [what organisers/facilitators should act on based on audience input]
+- [what organisers/hostors should act on based on audience input]
 - [follow-up topic or event recommendation]
 
 ---
@@ -241,12 +297,14 @@ Write in this exact Markdown structure:
   }
 
   // Training
+  const pCount = participants.length
   return `You are writing a training session report for Lapendaz.
 
 Training: "${title}"
 Date: ${date}
+Host: ${host || 'N/A'}
 Learning Objective: "${goal}"
-Participants: ${participantCount}
+Participants: ${pCount}
 
 Responses collected:
 ${responsesFlat}
@@ -254,7 +312,7 @@ ${responsesFlat}
 Write in this exact Markdown structure:
 
 # ${title} — Training Report
-**Date:** ${date} | **Type:** Training | **Participants:** ${participantCount}
+**Date:** ${date} | **Type:** Training | **Host:** ${host || 'N/A'} | **Participants:** ${pCount}
 
 ---
 
@@ -287,12 +345,14 @@ ${perQuestion || '[No assessment questions were recorded.]'}
 export async function generateSummary(
   title: string,
   goal: string,
-  steps: Array<{ title: string; content: string; is_question: number }>,
+  steps: Array<{ title: string; content: string; type: string; is_question: number }>,
   responses: Array<{ participant_name: string; participant_role: string; step_title: string; content: string }>,
+  participants: Array<{ name: string; role: string }> = [],
   sessionType: SessionType = 'Meeting',
-  attribution: AttributionMode = 'named'
+  attribution: AttributionMode = 'named',
+  host: string = ''
 ): Promise<string> {
-  const prompt = buildPrompt(title, goal, sessionType, attribution, steps, responses)
+  const prompt = buildPrompt(title, goal, host, sessionType, attribution, steps, responses, participants)
 
   const message = await getClient().messages.create({
     model: 'claude-sonnet-4-6',

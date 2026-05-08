@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession, getSteps, getResponses, saveSessionSummary, updateSessionStatus } from '@/lib/db'
+import { getSession, getSteps, getResponses, saveSessionSummary, updateSessionStatus, getParticipants } from '@/lib/db'
 import { generateSummary } from '@/lib/anthropic'
 import { emitEvent } from '@/lib/events'
 import { logger } from '@/lib/log'
@@ -13,7 +13,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const steps = getSteps(id)
   const responses = getResponses(id)
-  logger.info(`POST /api/sessions/${id}/summary`, 'Generating summary', { steps: steps.length, responses: responses.length })
+  const participants = getParticipants(id)
+  logger.info(`POST /api/sessions/${id}/summary`, 'Generating summary', { steps: steps.length, responses: responses.length, participants: participants.length })
 
   const stepMap = new Map(steps.map(s => [s.id, s.title]))
   const enrichedResponses = responses.map(r => ({
@@ -23,14 +24,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   let sessionType: 'Meeting' | 'Workshop' | 'Forum' | 'Training' = 'Meeting'
   let attribution: 'named' | 'role' | 'anonymous' = 'named'
+  let host = ''
   try {
     const ctx = session.context ? JSON.parse(session.context) : {}
     if (['Meeting', 'Workshop', 'Forum', 'Training'].includes(ctx.session_type)) sessionType = ctx.session_type
     if (['named', 'role', 'anonymous'].includes(ctx.attribution)) attribution = ctx.attribution
+    if (ctx.host_name) host = ctx.host_name
   } catch { /* context parse error — use defaults */ }
 
   try {
-    const summary = await generateSummary(session.title, session.goal, steps, enrichedResponses, sessionType, attribution)
+    const summary = await generateSummary(session.title, session.goal, steps, enrichedResponses, participants, sessionType, attribution, host)
     saveSessionSummary(id, summary)
     if (hostOnly) {
       // Host-only: participants go to ad page immediately, report not shared
