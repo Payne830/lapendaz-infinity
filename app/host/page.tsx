@@ -459,15 +459,13 @@ export default function HostPage() {
                             {new Date(s.savedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
-                        {(s.slides || slidesDraft) && (
-                          <button
-                            onClick={() => editSession(s)}
-                            className="text-xs px-3 py-1.5 rounded-lg font-semibold flex-shrink-0"
-                            style={{ background: '#1E2A3A', color: '#B0BDD0', border: '1px solid #2A3A4A' }}
-                          >
-                            ✏️ Edit
-                          </button>
-                        )}
+                        <button
+                          onClick={() => editSession(s)}
+                          className="text-xs px-3 py-1.5 rounded-lg font-semibold flex-shrink-0"
+                          style={{ background: '#1E2A3A', color: '#B0BDD0', border: '1px solid #2A3A4A' }}
+                        >
+                          ✏️ Edit
+                        </button>
                         <button
                           onClick={() => router.push(`/host/session/${s.id}`)}
                           className="text-xs px-3 py-1.5 rounded-lg font-semibold flex-shrink-0"
