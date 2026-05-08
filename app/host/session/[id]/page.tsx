@@ -420,14 +420,19 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
                 {/* Current slide */}
                 {(() => {
                   const { bg, accent, textPrimary, textSecondary } = getSlideTheme(visualTheme, currentStep.type)
+                  const isImageSlide = currentStep.type === 'image'
                   return (
                 <div className="rounded-2xl overflow-hidden flex-1 min-h-0" style={{
                   border: '1px solid #2A3A4A',
                   position: 'relative',
-                  background: currentStep.image_url ? `url(${currentStep.image_url}) center/cover no-repeat` : bg,
+                  background: (!isImageSlide && currentStep.image_url) ? `url(${currentStep.image_url}) center/cover no-repeat` : bg,
+                  display: 'flex', flexDirection: 'column',
                 }}>
-                  {currentStep.image_url && <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg,rgba(0,0,0,0.65),rgba(0,0,0,0.4))' }} />}
-                  <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: accent }} />
+                  {!isImageSlide && currentStep.image_url && <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg,rgba(0,0,0,0.65),rgba(0,0,0,0.4))' }} />}
+                  {!currentStep.image_url && <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: accent }} />}
+                  {isImageSlide && currentStep.image_url
+                    ? <img src={currentStep.image_url} alt="" style={{ width: '100%', objectFit: 'cover', flex: 1, minHeight: 0 }} />
+                    : (
                   <div className="relative z-10 p-10 h-full flex flex-col justify-center">
                     <div className="flex items-center gap-2 mb-4">
                       <span className={`tag tag-${currentStep.type}`}>{currentStep.type}</span>
@@ -442,6 +447,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
                       {currentStep.content}
                     </p>
                   </div>
+                    )}
                 </div>
                   )
                 })()}

@@ -429,16 +429,21 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
             {/* Slide card */}
             {(() => {
               const { bg, accent, textPrimary, textSecondary } = getSlideTheme(visualTheme, currentStep.type)
+              const isImageSlide = currentStep.type === 'image'
               return (
             <div className="fade-in rounded-xl overflow-hidden" style={{
-              border: `1px solid ${accent}30`, position: 'relative', minHeight: 260,
-              background: currentStep.image_url ? `url(${currentStep.image_url}) center/cover no-repeat` : bg,
+              border: `1px solid ${accent}30`, position: 'relative',
+              minHeight: isImageSlide ? undefined : 260,
+              background: (!isImageSlide && currentStep.image_url) ? `url(${currentStep.image_url}) center/cover no-repeat` : bg,
             }}>
-              <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: accent }} />
-              {currentStep.image_url && (
+              {!currentStep.image_url && <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: accent }} />}
+              {!isImageSlide && currentStep.image_url && (
                 <div className="absolute inset-0"
                   style={{ background: 'linear-gradient(160deg,rgba(0,0,0,0.7),rgba(0,0,0,0.45))' }} />
               )}
+              {isImageSlide && currentStep.image_url
+                ? <img src={currentStep.image_url} alt="" style={{ width: '100%', display: 'block', objectFit: 'cover' }} />
+                : (
               <div className="relative z-10 p-5 pl-6">
                 <span className={`tag tag-${currentStep.type} mb-3 inline-block`}>{currentStep.type}</span>
                 <h2 className="text-xl font-bold mb-2" style={{
@@ -451,6 +456,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
                   whiteSpace: 'pre-wrap',
                 }}>{currentStep.content}</p>
               </div>
+                )}
             </div>
               )
             })()}

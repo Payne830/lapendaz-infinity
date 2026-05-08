@@ -816,7 +816,8 @@ function SlideCard({ index, slide, visual_theme, prompt, regenerating, onUpdate,
     reader.readAsDataURL(file)
   }
 
-  const bgStyle = slide.image_url
+  const isImageSlide = slide.type === 'image'
+  const bgStyle = (!isImageSlide && slide.image_url)
     ? `url(${slide.image_url}) center/cover no-repeat`
     : bg
 
@@ -824,8 +825,20 @@ function SlideCard({ index, slide, visual_theme, prompt, regenerating, onUpdate,
     <div ref={setNodeRef} {...attributes} style={{ ...style, border: `1px solid ${editing ? accent + '60' : accent + '30'}`, borderRadius: 12, overflow: 'hidden' }}>
 
       {/* ── Visual Slide (WYSIWYG) ── */}
-      <div className="relative group" style={{ minHeight: 220, background: bgStyle }}>
-        {slide.image_url && (
+      <div className="relative group" style={{ minHeight: isImageSlide ? undefined : 220, background: bgStyle }}>
+
+        {/* Image type: clean photo via <img> — no overlay, no text */}
+        {isImageSlide && slide.image_url && (
+          <img src={slide.image_url} alt="" style={{ width: '100%', display: 'block', objectFit: 'cover' }} />
+        )}
+        {isImageSlide && !slide.image_url && (
+          <div style={{ minHeight: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <p className="text-xs" style={{ color: '#3A4A6A' }}>📷 Upload a photo below</p>
+          </div>
+        )}
+
+        {/* Non-image slides: dark overlay when photo is used as background */}
+        {!isImageSlide && slide.image_url && (
           <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg,rgba(0,0,0,0.55),rgba(0,0,0,0.35))' }} />
         )}
         {!slide.image_url && (
@@ -852,87 +865,89 @@ function SlideCard({ index, slide, visual_theme, prompt, regenerating, onUpdate,
           className="absolute top-4 right-4 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-30"
           style={{ color: 'rgba(255,255,255,0.5)' }}>✕</button>
 
-        {/* WYSIWYG content area — click to edit inline */}
-        <div className="relative z-10 px-8 py-8 ml-2" onClick={() => setEditing(true)}>
-          {slide.is_question && (
-            <p className="text-xs font-semibold mb-2 uppercase tracking-wider select-none" style={{ color: accent }}>💬 Interaction Required</p>
-          )}
-          <div style={{ marginBottom: '0.75rem' }}>
-            {editing ? (
-              <div
-                ref={titleRef}
-                contentEditable
-                suppressContentEditableWarning
-                onBlur={e => onUpdate('title', e.currentTarget.innerText)}
-                className="font-black leading-tight outline-none"
-                style={{
-                  color: slide.image_url ? '#FFFFFF' : textPrimary,
-                  fontSize: (slide.title || '').length > 40 ? '1.1rem' : '1.5rem',
-                  cursor: 'text',
-                  borderBottom: `1px solid ${accent}50`,
-                  paddingBottom: 2,
-                  minHeight: '1.5em',
-                  textShadow: slide.image_url ? '0 2px 8px rgba(0,0,0,0.8)' : 'none',
-                }}
-              />
-            ) : (
-              <div
-                className="font-black leading-tight"
-                style={{
-                  color: slide.title ? (slide.image_url ? '#FFFFFF' : textPrimary) : '#3A4A6A',
-                  fontSize: (slide.title || '').length > 40 ? '1.1rem' : '1.5rem',
-                  fontWeight: slide.title ? undefined : 400,
-                  cursor: 'pointer',
-                  minHeight: '1.5em',
-                  textShadow: slide.image_url ? '0 2px 8px rgba(0,0,0,0.8)' : 'none',
-                }}
-              >
-                {slide.title || 'Untitled — click to edit'}
-              </div>
+        {/* WYSIWYG content area — hidden for image type */}
+        {!isImageSlide && (
+          <div className="relative z-10 px-8 py-8 ml-2" onClick={() => setEditing(true)}>
+            {slide.is_question && (
+              <p className="text-xs font-semibold mb-2 uppercase tracking-wider select-none" style={{ color: accent }}>💬 Interaction Required</p>
             )}
+            <div style={{ marginBottom: '0.75rem' }}>
+              {editing ? (
+                <div
+                  ref={titleRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onBlur={e => onUpdate('title', e.currentTarget.innerText)}
+                  className="font-black leading-tight outline-none"
+                  style={{
+                    color: slide.image_url ? '#FFFFFF' : textPrimary,
+                    fontSize: (slide.title || '').length > 40 ? '1.1rem' : '1.5rem',
+                    cursor: 'text',
+                    borderBottom: `1px solid ${accent}50`,
+                    paddingBottom: 2,
+                    minHeight: '1.5em',
+                    textShadow: slide.image_url ? '0 2px 8px rgba(0,0,0,0.8)' : 'none',
+                  }}
+                />
+              ) : (
+                <div
+                  className="font-black leading-tight"
+                  style={{
+                    color: slide.title ? (slide.image_url ? '#FFFFFF' : textPrimary) : '#3A4A6A',
+                    fontSize: (slide.title || '').length > 40 ? '1.1rem' : '1.5rem',
+                    fontWeight: slide.title ? undefined : 400,
+                    cursor: 'pointer',
+                    minHeight: '1.5em',
+                    textShadow: slide.image_url ? '0 2px 8px rgba(0,0,0,0.8)' : 'none',
+                  }}
+                >
+                  {slide.title || 'Untitled — click to edit'}
+                </div>
+              )}
+            </div>
+            <div>
+              {editing ? (
+                <div
+                  ref={contentRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onBlur={e => onUpdate('content', e.currentTarget.innerText)}
+                  className="text-sm leading-relaxed outline-none"
+                  style={{
+                    color: slide.image_url ? 'rgba(255,255,255,0.85)' : textSecondary,
+                    cursor: 'text',
+                    borderBottom: `1px solid ${accent}30`,
+                    paddingBottom: 2,
+                    minHeight: '2em',
+                    textShadow: slide.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
+                  }}
+                />
+              ) : (
+                <div
+                  className="text-sm leading-relaxed"
+                  style={{
+                    color: slide.content ? (slide.image_url ? 'rgba(255,255,255,0.65)' : textSecondary) : '#3A4A6A',
+                    cursor: 'pointer',
+                    minHeight: '2em',
+                    textShadow: slide.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
+                    whiteSpace: 'pre-wrap',
+                  }}
+                >
+                  {slide.content || 'No content yet'}
+                </div>
+              )}
+            </div>
           </div>
-          <div>
-            {editing ? (
-              <div
-                ref={contentRef}
-                contentEditable
-                suppressContentEditableWarning
-                onBlur={e => onUpdate('content', e.currentTarget.innerText)}
-                className="text-sm leading-relaxed outline-none"
-                style={{
-                  color: slide.image_url ? 'rgba(255,255,255,0.85)' : textSecondary,
-                  cursor: 'text',
-                  borderBottom: `1px solid ${accent}30`,
-                  paddingBottom: 2,
-                  minHeight: '2em',
-                  textShadow: slide.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
-                }}
-              />
-            ) : (
-              <div
-                className="text-sm leading-relaxed"
-                style={{
-                  color: slide.content ? (slide.image_url ? 'rgba(255,255,255,0.65)' : textSecondary) : '#3A4A6A',
-                  cursor: 'pointer',
-                  minHeight: '2em',
-                  textShadow: slide.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
-                  whiteSpace: 'pre-wrap',
-                }}
-              >
-                {slide.content || 'No content yet'}
-              </div>
-            )}
-          </div>
-        </div>
+        )}
 
-        {/* Bottom toolbar — visible in editing mode */}
-        {editing && (
+        {/* Bottom toolbar — visible in editing mode (non-image only) */}
+        {editing && !isImageSlide && (
           <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center gap-2 px-4 py-2" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
             <button onClick={() => setEditing(false)} className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Done ✓</button>
           </div>
         )}
 
-        {!editing && (
+        {!editing && !isImageSlide && (
           <div className="absolute bottom-3 right-4 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
             style={{ color: 'rgba(255,255,255,0.4)' }}>
             Click to edit
