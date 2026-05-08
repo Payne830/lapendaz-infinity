@@ -30,6 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   if (direction === 'close') {
+    updateSessionStatus(id, 'closed')
     emitEvent(id, { type: 'session_closed' })
     logger.info(`POST /api/sessions/${id}/advance`, 'Session closed by host')
     return NextResponse.json({ status: 'closed' })

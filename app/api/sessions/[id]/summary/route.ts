@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession, getSteps, getResponses, saveSessionSummary } from '@/lib/db'
+import { getSession, getSteps, getResponses, saveSessionSummary, updateSessionStatus } from '@/lib/db'
 import { generateSummary } from '@/lib/anthropic'
 import { emitEvent } from '@/lib/events'
 import { logger } from '@/lib/log'
 
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const body = await req.json().catch(() => ({}))
+  const hostOnly: boolean = body.hostOnly === true
   const session = getSession(id)
   if (!session) { logger.warn(`POST /api/sessions/${id}/summary`, 'Session not found'); return NextResponse.json({ error: 'Not found' }, { status: 404 }) }
 
@@ -30,8 +32,14 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   try {
     const summary = await generateSummary(session.title, session.goal, steps, enrichedResponses, sessionType, attribution)
     saveSessionSummary(id, summary)
-    emitEvent(id, { type: 'report_ready', summary })
-    logger.info(`POST /api/sessions/${id}/summary`, 'Summary generated OK')
+    if (hostOnly) {
+      // Host-only: participants go to ad page immediately, report not shared
+      updateSessionStatus(id, 'closed')
+      emitEvent(id, { type: 'session_closed' })
+    } else {
+      emitEvent(id, { type: 'report_ready', summary })
+    }
+    logger.info(`POST /api/sessions/${id}/summary`, `Summary generated OK (hostOnly=${hostOnly})`)
     return NextResponse.json({ summary })
   } catch (err) {
     logger.error(`POST /api/sessions/${id}/summary`, 'AI summary failed', { err: String(err) })

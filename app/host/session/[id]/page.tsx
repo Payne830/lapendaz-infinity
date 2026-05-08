@@ -27,6 +27,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
   const [showTunnelInput, setShowTunnelInput] = useState(false)
   const [summary, setSummary] = useState('')
   const [loadingSummary, setLoadingSummary] = useState(false)
+  const [hostOnly, setHostOnly] = useState(false)
   const [liveAnalysis, setLiveAnalysis] = useState('')
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [started, setStarted] = useState(false)
@@ -160,7 +161,11 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
 
   async function generateSummary() {
     setLoadingSummary(true)
-    const res = await fetch(`/api/sessions/${id}/summary`, { method: 'POST' })
+    const res = await fetch(`/api/sessions/${id}/summary`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hostOnly }),
+    })
     const data = await res.json()
     setSummary(data.summary)
     setLoadingSummary(false)
@@ -328,15 +333,27 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
               </div>
             </div>
 
-          ) : session.status === 'ended' ? (
+          ) : session.status === 'ended' || session.status === 'closed' ? (
             /* SESSION ENDED */
             <div className="fade-in flex flex-col gap-4 max-w-2xl mx-auto w-full">
               <div className="card">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xl font-bold" style={{ color: '#F0F4FF' }}>Session Complete 🎉</h2>
-                  <button onClick={generateSummary} disabled={loadingSummary} className="btn-gold text-sm px-5">
-                    {loadingSummary ? '⏳ Generating...' : '✨ Generate Report'}
-                  </button>
+                  <div className="flex flex-col items-end gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer select-none" style={{ color: '#B0BDD0', fontSize: '0.8rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={hostOnly}
+                        onChange={e => setHostOnly(e.target.checked)}
+                        style={{ accentColor: '#C9A84C', width: 14, height: 14 }}
+                      />
+                      <span>🔒 For Host Only</span>
+                    </label>
+                    {hostOnly && <p className="text-xs text-right" style={{ color: '#6B7A99', maxWidth: 200 }}>Participants will see the ad page, not the report</p>}
+                    <button onClick={generateSummary} disabled={loadingSummary || !!summary} className="btn-gold text-sm px-5">
+                      {loadingSummary ? '⏳ Generating...' : summary ? '✓ Report Ready' : '✨ Generate Report'}
+                    </button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   <Stat label="Participants" value={participants.length} />

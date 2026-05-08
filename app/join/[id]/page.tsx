@@ -84,6 +84,12 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
     if (!res.ok) { setError('Session not found'); return }
     const data = await res.json()
     try { setAtmosphere(JSON.parse(data.session.context || '{}').atmosphere || 'Inspirational') } catch { /* use default */ }
+    if (data.session.status === 'closed') {
+      setSessionTitle(data.session.title)
+      setSessionSummary(data.session.summary || '')
+      setPhase('closed')
+      return
+    }
     if (data.session.status === 'ended') {
       setSessionTitle(data.session.title)
       setSessionSummary(data.session.summary || '')
@@ -145,15 +151,16 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
     return () => clearInterval(poll)
   }, [id, phase])
 
-  // Poll for report in ended phase (fallback if SSE report_ready was missed)
+  // Poll in ended phase: detect report_ready (fallback) and session_closed
   useEffect(() => {
-    if (phase !== 'ended' || sessionSummary) return
+    if (phase !== 'ended') return
     const poll = setInterval(async () => {
       try {
         const res = await fetch(`/api/sessions/${id}`)
         if (!res.ok) return
         const data = await res.json()
-        if (data.session.summary) setSessionSummary(data.session.summary)
+        if (data.session.status === 'closed') { setSessionSummary(data.session.summary || ''); setPhase('closed'); return }
+        if (data.session.summary && !sessionSummary) setSessionSummary(data.session.summary)
       } catch { /* ignore */ }
     }, 3000)
     return () => clearInterval(poll)
