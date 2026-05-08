@@ -829,7 +829,7 @@ function SlideCard({ index, slide, visual_theme, prompt, regenerating, onUpdate,
 
         {/* Image type: clean photo via <img> — no overlay, no text */}
         {isImageSlide && slide.image_url && (
-          <img src={slide.image_url} alt="" style={{ width: '100%', height: 220, display: 'block', objectFit: 'cover' }} />
+          <img src={slide.image_url} alt="" style={{ width: '100%', aspectRatio: '16/9', display: 'block', objectFit: 'cover' }} />
         )}
         {isImageSlide && !slide.image_url && (
           <div style={{ minHeight: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

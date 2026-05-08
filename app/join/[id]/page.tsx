@@ -442,7 +442,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
                   style={{ background: 'linear-gradient(160deg,rgba(0,0,0,0.7),rgba(0,0,0,0.45))' }} />
               )}
               {isImageSlide && currentStep.image_url
-                ? <img src={currentStep.image_url} alt="" style={{ width: '100%', display: 'block', objectFit: 'cover' }} />
+                ? <img src={currentStep.image_url} alt="" style={{ width: '100%', aspectRatio: '16/9', display: 'block', objectFit: 'cover' }} />
                 : (
               <div className="relative z-10 p-5 pl-6">
                 <span className={`tag tag-${currentStep.type} mb-3 inline-block`}>{currentStep.type}</span>
