@@ -376,29 +376,20 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
     </div>
   )
 
-  /* ── CLOSED (host ended + closed the session) ── */
+  /* ── CLOSED (host closed the session) ── */
   if (phase === 'closed') return (
-    <div className="min-h-screen flex flex-col px-5 py-8" style={{ maxWidth: 520, margin: '0 auto' }}>
-      <div className="fade-in space-y-5">
-        {sessionSummary && (
-          <div className="space-y-3">
-            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#C9A84C' }}>
-              {sessionTitle} — Session Report
-            </p>
-            <div ref={reportRef} className="rounded-xl p-4 report-body overflow-y-auto"
-              style={{ background: '#111827', border: '1px solid #2A3A4A', maxHeight: '40vh' }}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{sessionSummary}</ReactMarkdown>
-            </div>
-            <button onClick={downloadPdf} className="btn-ghost w-full text-center text-sm">
-              ⬇ Download Report (PDF)
-            </button>
-          </div>
-        )}
-        <div className="card text-center space-y-4 py-8" style={{ borderColor: 'rgba(201,168,76,0.35)', background: 'rgba(201,168,76,0.04)' }}>
-          <div className="text-4xl font-black" style={{ color: '#C9A84C' }}>∞</div>
-          <h2 className="text-xl font-black" style={{ color: '#F0F4FF' }}>Host your own session</h2>
+    <div className="min-h-screen flex items-center justify-center px-5">
+      <div className="fade-in text-center space-y-6 w-full" style={{ maxWidth: 400 }}>
+        <div className="text-5xl font-black" style={{ color: '#C9A84C' }}>∞</div>
+        <div>
+          <h1 className="text-2xl font-black mb-2" style={{ color: '#F0F4FF' }}>Thank You for Joining!</h1>
+          <p className="text-sm" style={{ color: '#6B7A99' }}>This session has ended. See you next time.</p>
+        </div>
+        <div className="card space-y-4 py-6" style={{ borderColor: 'rgba(201,168,76,0.35)', background: 'rgba(201,168,76,0.04)' }}>
+          <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#C9A84C' }}>Want to run your own?</p>
+          <h2 className="text-lg font-black" style={{ color: '#F0F4FF' }}>Host your own session</h2>
           <p className="text-sm leading-relaxed" style={{ color: '#B0BDD0' }}>
-            Run AI-powered meetings with live responses, real-time insights, and instant reports — just like this one.
+            AI-powered meetings with live responses, real-time insights, and instant reports — just like this one.
           </p>
           <a href="/host" className="btn-gold block text-center text-sm">
             🚀 Create Your Session →
