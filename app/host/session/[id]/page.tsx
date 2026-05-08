@@ -31,7 +31,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
   const [liveAnalysis, setLiveAnalysis] = useState('')
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [started, setStarted] = useState(false)
-  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [presentationMode, setPresentationMode] = useState(false)
   const reportRef = useRef<HTMLDivElement>(null)
 
   const currentStep = session ? steps[session.current_step] : null
@@ -41,18 +41,10 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
   const visualTheme = (() => { try { return JSON.parse(session?.context || '{}').visual_theme || 'Infinity' } catch { return 'Infinity' } })()
 
   useEffect(() => {
-    const handler = () => setIsFullscreen(!!document.fullscreenElement)
-    document.addEventListener('fullscreenchange', handler)
-    return () => document.removeEventListener('fullscreenchange', handler)
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setPresentationMode(false) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
   }, [])
-
-  function toggleFullscreen() {
-    if (document.fullscreenElement) {
-      document.exitFullscreen()
-    } else {
-      document.documentElement.requestFullscreen().catch(() => {})
-    }
-  }
 
   const loadSession = useCallback(async () => {
     const res = await fetch(`/api/sessions/${id}`)
@@ -279,12 +271,12 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
           <span className="text-sm font-bold truncate max-w-xs" style={{ color: '#F0F4FF' }}>{session.title}</span>
           <span className="text-xs" style={{ color: '#6B7A99' }}>{participants.length} joined</span>
           <button
-            onClick={toggleFullscreen}
+            onClick={() => setPresentationMode(v => !v)}
             className="text-xs px-2.5 py-1.5 rounded-lg flex-shrink-0"
-            style={{ background: '#1E2A3A', color: '#6B7A99', border: '1px solid #2A3A4A' }}
-            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            style={{ background: presentationMode ? 'rgba(201,168,76,0.15)' : '#1E2A3A', color: presentationMode ? '#C9A84C' : '#6B7A99', border: `1px solid ${presentationMode ? 'rgba(201,168,76,0.4)' : '#2A3A4A'}` }}
+            title={presentationMode ? 'Exit presentation (Esc)' : 'Presentation mode — hide sidebar'}
           >
-            {isFullscreen ? '⊡' : '⛶'}
+            {presentationMode ? '⊡' : '⛶'}
           </button>
         </div>
       </div>
@@ -486,7 +478,8 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
           )}
         </div>
 
-        {/* ── RIGHT PANEL ── */}
+        {/* ── RIGHT PANEL — hidden in presentation mode, shown in question mode ── */}
+        {(!presentationMode || currentMode === 'question') && (
         <div className="w-72 flex flex-col flex-shrink-0" style={{ borderLeft: '1px solid #2A3A4A', background: '#0D1220' }}>
           {/* Participants */}
           <div className="p-4 flex-shrink-0" style={{ borderBottom: '1px solid #2A3A4A' }}>
@@ -555,6 +548,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   )
