@@ -423,7 +423,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
                   {!isImageSlide && currentStep.image_url && <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg,rgba(0,0,0,0.65),rgba(0,0,0,0.4))' }} />}
                   {!currentStep.image_url && <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: accent }} />}
                   {isImageSlide && currentStep.image_url
-                    ? <img src={currentStep.image_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    ? <img src={currentStep.image_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
                     : (
                   <div className="relative z-10 p-10 h-full flex flex-col justify-center">
                     <div className="flex items-center gap-2 mb-4">
