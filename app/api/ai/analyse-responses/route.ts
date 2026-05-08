@@ -19,25 +19,30 @@ export async function POST(req: NextRequest) {
 
     const result = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 600,
+      max_tokens: 350,
       messages: [{
         role: 'user',
-        content: `You are a live session facilitator analysing participant responses in real-time.
+        content: `You are a live session facilitator. Analyse these ${responses.length} responses BRIEFLY.
 
-Question asked: "${question.title}"
-${question.content ? `Context: ${question.content}` : ''}
+Question: "${question.title}"
 
-Participant responses (${responses.length} total):
+Responses:
 ${responseLines}
 
-Analyse these responses and return a short, punchy live analysis. Structure:
+Return EXACTLY this structure — no extra text, no paragraphs:
 
-**🔑 Main Themes** (2-3 bullet points — what patterns emerge)
-**⭐ Standout Response** (quote the most insightful or unexpected one, name the participant)
-**📊 Group Pulse** (1 sentence on overall direction/energy/consensus)
-**💡 Facilitator Insight** (1 sentence — something clever, surprising, or worth highlighting to the room)
+**📊 Patterns** (max 3 bullets, each ≤10 words, include frequency if repeated e.g. "3/5 want X")
+• ...
+• ...
 
-Keep it concise and energetic — this will be read aloud or shared on screen. Mix English and Chinese naturally if the responses do.`,
+**⭐ Best Quote** — [Name]: "exact short quote"
+
+**💡 3 Insights for Facilitator**
+1. (≤12 words)
+2. (≤12 words)
+3. (≤12 words)
+
+Match the language of the responses (Chinese/English/mixed).`,
       }],
     })
 
