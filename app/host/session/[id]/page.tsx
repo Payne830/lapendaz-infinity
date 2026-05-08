@@ -31,12 +31,28 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
   const [liveAnalysis, setLiveAnalysis] = useState('')
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [started, setStarted] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const reportRef = useRef<HTMLDivElement>(null)
 
   const currentStep = session ? steps[session.current_step] : null
   const currentMode = session?.live_mode ?? 'slide'
   const currentResponses = currentStep ? responses.filter(r => r.step_id === currentStep.id) : []
   const atmosphere = (() => { try { return JSON.parse(session?.context || '{}').atmosphere || 'Inspirational' } catch { return 'Inspirational' } })()
+  const visualTheme = (() => { try { return JSON.parse(session?.context || '{}').visual_theme || 'Infinity' } catch { return 'Infinity' } })()
+
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', handler)
+    return () => document.removeEventListener('fullscreenchange', handler)
+  }, [])
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen()
+    } else {
+      document.documentElement.requestFullscreen().catch(() => {})
+    }
+  }
 
   const loadSession = useCallback(async () => {
     const res = await fetch(`/api/sessions/${id}`)
@@ -262,6 +278,14 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
         <div className="flex items-center gap-4">
           <span className="text-sm font-bold truncate max-w-xs" style={{ color: '#F0F4FF' }}>{session.title}</span>
           <span className="text-xs" style={{ color: '#6B7A99' }}>{participants.length} joined</span>
+          <button
+            onClick={toggleFullscreen}
+            className="text-xs px-2.5 py-1.5 rounded-lg flex-shrink-0"
+            style={{ background: '#1E2A3A', color: '#6B7A99', border: '1px solid #2A3A4A' }}
+            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          >
+            {isFullscreen ? '⊡' : '⛶'}
+          </button>
         </div>
       </div>
 
@@ -395,7 +419,7 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
 
                 {/* Current slide */}
                 {(() => {
-                  const { bg, accent } = getSlideTheme(atmosphere, currentStep.type)
+                  const { bg, accent, textPrimary, textSecondary } = getSlideTheme(visualTheme, currentStep.type)
                   return (
                 <div className="rounded-2xl overflow-hidden flex-1 min-h-0" style={{
                   border: '1px solid #2A3A4A',
@@ -411,10 +435,10 @@ export default function HostSession({ params }: { params: Promise<{ id: string }
                         {session.current_step + 1} / {steps.length}
                       </span>
                     </div>
-                    <h2 className="font-black mb-4 leading-tight" style={{ color: '#FFFFFF', fontSize: currentStep.title.length > 50 ? '1.6rem' : '2.2rem' }}>
+                    <h2 className="font-black mb-4 leading-tight" style={{ color: currentStep.image_url ? '#FFFFFF' : textPrimary, fontSize: currentStep.title.length > 50 ? '1.6rem' : '2.2rem' }}>
                       {currentStep.title}
                     </h2>
-                    <p className="leading-relaxed" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '1.05rem', maxWidth: '80%', whiteSpace: 'pre-wrap' }}>
+                    <p className="leading-relaxed" style={{ color: currentStep.image_url ? 'rgba(255,255,255,0.7)' : textSecondary, fontSize: '1.05rem', maxWidth: '80%', whiteSpace: 'pre-wrap' }}>
                       {currentStep.content}
                     </p>
                   </div>

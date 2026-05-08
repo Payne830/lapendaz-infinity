@@ -15,6 +15,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
   const [sessionTitle, setSessionTitle] = useState('')
   const [sessionSummary, setSessionSummary] = useState('')
   const [atmosphere, setAtmosphere] = useState('Inspirational')
+  const [visualTheme, setVisualTheme] = useState('Infinity')
   const [steps, setSteps] = useState<Step[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [liveMode, setLiveMode] = useState<'slide' | 'question'>('slide')
@@ -84,6 +85,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
     if (!res.ok) { setError('Session not found'); return }
     const data = await res.json()
     try { setAtmosphere(JSON.parse(data.session.context || '{}').atmosphere || 'Inspirational') } catch { /* use default */ }
+    try { setVisualTheme(JSON.parse(data.session.context || '{}').visual_theme || 'Infinity') } catch { /* use default */ }
     if (data.session.status === 'closed') {
       setSessionTitle(data.session.title)
       setSessionSummary(data.session.summary || '')
@@ -426,7 +428,7 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
           <>
             {/* Slide card */}
             {(() => {
-              const { bg, accent } = getSlideTheme(atmosphere, currentStep.type)
+              const { bg, accent, textPrimary, textSecondary } = getSlideTheme(visualTheme, currentStep.type)
               return (
             <div className="fade-in rounded-xl overflow-hidden" style={{
               border: `1px solid ${accent}30`, position: 'relative', minHeight: 260,
@@ -440,11 +442,11 @@ export default function JoinPage({ params }: { params: Promise<{ id: string }> }
               <div className="relative z-10 p-5 pl-6">
                 <span className={`tag tag-${currentStep.type} mb-3 inline-block`}>{currentStep.type}</span>
                 <h2 className="text-xl font-bold mb-2" style={{
-                  color: '#FFFFFF',
+                  color: currentStep.image_url ? '#FFFFFF' : textPrimary,
                   textShadow: currentStep.image_url ? '0 2px 8px rgba(0,0,0,0.9)' : 'none',
                 }}>{currentStep.title}</h2>
                 <p className="text-sm leading-relaxed" style={{
-                  color: currentStep.image_url ? 'rgba(255,255,255,0.88)' : '#B0BDD0',
+                  color: currentStep.image_url ? 'rgba(255,255,255,0.88)' : textSecondary,
                   textShadow: currentStep.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
                   whiteSpace: 'pre-wrap',
                 }}>{currentStep.content}</p>

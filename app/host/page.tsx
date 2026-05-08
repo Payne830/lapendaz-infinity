@@ -9,7 +9,7 @@ import {
   arrayMove, SortableContext, verticalListSortingStrategy, useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { getSlideTheme } from '@/lib/atmosphere'
+import { getSlideTheme, SESSION_TONES, VISUAL_THEMES } from '@/lib/atmosphere'
 
 type WizardStep = 1 | 2
 
@@ -21,13 +21,14 @@ interface Context {
   outcome: string
   duration: string
   atmosphere: string
+  visual_theme: string
   session_type: string
   attribution: string
 }
 
 interface Slide {
   id: string
-  type: 'intro' | 'slide' | 'question' | 'reflection' | 'closing'
+  type: 'intro' | 'slide' | 'question' | 'reflection' | 'closing' | 'image'
   title: string
   content: string
   is_question: boolean
@@ -43,7 +44,6 @@ interface SavedSession {
   slidePrompts?: string[]
 }
 
-const ATMOSPHERE_OPTIONS = ['Professional', 'Casual & Warm', 'Energetic', 'Inspirational', 'Structured & Formal']
 const SESSION_TYPE_OPTIONS = ['Meeting', 'Workshop', 'Forum', 'Training']
 const ATTRIBUTION_OPTIONS = [
   { value: 'named', label: 'Named', desc: 'Full name in report' },
@@ -74,7 +74,7 @@ function formatRelativeTime(ts: number): string {
 
 const DEFAULT_CTX: Context = {
   title: '', host_name: '', objective: '', participants: '', outcome: '', duration: '',
-  atmosphere: 'Inspirational', session_type: 'Meeting', attribution: 'named',
+  atmosphere: 'Inspirational', visual_theme: 'Infinity', session_type: 'Meeting', attribution: 'named',
 }
 
 export default function HostPage() {
@@ -539,9 +539,9 @@ export default function HostPage() {
                   <input className="input-field" placeholder="e.g. 90 minutes" value={ctx.duration} onChange={e => updateCtx('duration', e.target.value)} />
                 </Field>
 
-                <Field label="5. What atmosphere would you like to create?" hint="Choose the tone for your session">
+                <Field label="5. What tone should this session have?" hint="AI will use this to shape the language and writing style of your slides">
                   <div className="flex flex-wrap gap-2">
-                    {ATMOSPHERE_OPTIONS.map(opt => (
+                    {SESSION_TONES.map(opt => (
                       <button
                         key={opt}
                         onClick={() => updateCtx('atmosphere', opt)}
@@ -678,6 +678,35 @@ export default function HostPage() {
                 </div>
               </div>
 
+              {/* Visual Theme picker */}
+              <div className="card" style={{ borderColor: '#C9A84C33' }}>
+                <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: '#C9A84C' }}>Visual Theme</p>
+                <p className="text-xs mb-3" style={{ color: '#6B7A99' }}>Background style shown during the session</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {Object.entries(VISUAL_THEMES).map(([themeName, palette]) => (
+                    <button
+                      key={themeName}
+                      onClick={() => updateCtx('visual_theme', themeName)}
+                      className="relative rounded-xl overflow-hidden"
+                      style={{
+                        height: 64,
+                        background: palette.bgs.slide,
+                        border: `2px solid ${(ctx.visual_theme ?? 'Infinity') === themeName ? palette.accent : 'transparent'}`,
+                      }}
+                    >
+                      <div className="absolute bottom-0 left-0 right-0 px-1.5 py-1" style={{ background: 'rgba(0,0,0,0.65)' }}>
+                        <p style={{ color: palette.accent, fontSize: 10, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{themeName}</p>
+                        {!palette.projectorSafe && <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 8, lineHeight: 1.1 }}>Screen only</p>}
+                      </div>
+                      {(ctx.visual_theme ?? 'Infinity') === themeName && (
+                        <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center"
+                          style={{ background: palette.accent, fontSize: 9, fontWeight: 900, color: '#000' }}>✓</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={slides.map(s => s.id)} strategy={verticalListSortingStrategy}>
                   {slides.map((s, i) => (
@@ -685,7 +714,7 @@ export default function HostPage() {
                       <SlideCard
                         index={i}
                         slide={s}
-                        atmosphere={ctx.atmosphere}
+                        visual_theme={ctx.visual_theme ?? 'Infinity'}
                         prompt={slidePrompts[i] || ''}
                         regenerating={regeneratingIndex === i}
                         onUpdate={(field, val) => updateSlide(i, field, val)}
@@ -730,7 +759,7 @@ export default function HostPage() {
 interface SlideCardProps {
   index: number
   slide: Slide
-  atmosphere: string
+  visual_theme: string
   prompt: string
   regenerating: boolean
   onUpdate: (field: keyof Slide, val: string | boolean) => void
@@ -739,12 +768,12 @@ interface SlideCardProps {
   onRegenerate: () => void
 }
 
-function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, onRemove, onPromptChange, onRegenerate }: SlideCardProps) {
+function SlideCard({ index, slide, visual_theme, prompt, regenerating, onUpdate, onRemove, onPromptChange, onRegenerate }: SlideCardProps) {
   const [editing, setEditing] = useState(false)
   const titleRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const photoRef = useRef<HTMLInputElement>(null)
-  const { accent, bg } = getSlideTheme(atmosphere, slide.type)
+  const { accent, bg, textPrimary, textSecondary } = getSlideTheme(visual_theme, slide.type)
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: slide.id })
   const style = {
@@ -837,7 +866,7 @@ function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, o
                 onBlur={e => onUpdate('title', e.currentTarget.innerText)}
                 className="font-black leading-tight outline-none"
                 style={{
-                  color: '#FFFFFF',
+                  color: slide.image_url ? '#FFFFFF' : textPrimary,
                   fontSize: (slide.title || '').length > 40 ? '1.1rem' : '1.5rem',
                   cursor: 'text',
                   borderBottom: `1px solid ${accent}50`,
@@ -850,7 +879,7 @@ function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, o
               <div
                 className="font-black leading-tight"
                 style={{
-                  color: slide.title ? '#FFFFFF' : '#3A4A6A',
+                  color: slide.title ? (slide.image_url ? '#FFFFFF' : textPrimary) : '#3A4A6A',
                   fontSize: (slide.title || '').length > 40 ? '1.1rem' : '1.5rem',
                   fontWeight: slide.title ? undefined : 400,
                   cursor: 'pointer',
@@ -871,7 +900,7 @@ function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, o
                 onBlur={e => onUpdate('content', e.currentTarget.innerText)}
                 className="text-sm leading-relaxed outline-none"
                 style={{
-                  color: 'rgba(255,255,255,0.85)',
+                  color: slide.image_url ? 'rgba(255,255,255,0.85)' : textSecondary,
                   cursor: 'text',
                   borderBottom: `1px solid ${accent}30`,
                   paddingBottom: 2,
@@ -883,7 +912,7 @@ function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, o
               <div
                 className="text-sm leading-relaxed"
                 style={{
-                  color: slide.content ? 'rgba(255,255,255,0.65)' : '#3A4A6A',
+                  color: slide.content ? (slide.image_url ? 'rgba(255,255,255,0.65)' : textSecondary) : '#3A4A6A',
                   cursor: 'pointer',
                   minHeight: '2em',
                   textShadow: slide.image_url ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
@@ -916,7 +945,7 @@ function SlideCard({ index, slide, atmosphere, prompt, regenerating, onUpdate, o
         <select value={slide.type} onChange={e => onUpdate('type', e.target.value)}
           className="text-xs px-2 py-1 rounded-full font-semibold"
           style={{ background: '#0A0E1A', color: accent, border: `1px solid ${accent}50` }}>
-          {['intro', 'slide', 'question', 'reflection', 'closing'].map(t => <option key={t}>{t}</option>)}
+          {['intro', 'slide', 'question', 'reflection', 'closing', 'image'].map(t => <option key={t}>{t}</option>)}
         </select>
         <label className="flex items-center gap-1 text-xs cursor-pointer" style={{ color: '#6B7A99' }}>
           <input type="checkbox" checked={slide.is_question} onChange={e => onUpdate('is_question', e.target.checked)} />
